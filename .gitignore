@@ -52,5 +52,5 @@ GoogleService-Info.plist
 *.keystore
 *.jks
 
-# Firebase & API keys (if you create separate config file)
+# API keys configuration (keep .example file only)
 lib/config/api_keys.dart
