@@ -1,0 +1,217 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'admin_appbar_actions.dart';
+import 'admin_menu.dart';
+import 'admin_orders.dart';
+
+class AdminDashboardPage extends StatelessWidget {
+  const AdminDashboardPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFFF7ED),
+      appBar: AppBar(
+        title: const Text('Dashboard Admin'),
+        backgroundColor: const Color(0xFFFF7A00),
+        foregroundColor: Colors.white,
+        actions: adminAppBarActions(context),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: const [
+            _HeaderCards(),
+            SizedBox(height: 16),
+            _QuickActions(),
+            SizedBox(height: 16),
+            _PendingOrdersCard(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderCards extends StatelessWidget {
+  const _HeaderCards();
+
+  @override
+  Widget build(BuildContext context) {
+    final orange = const Color(0xFFFF7A00);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: orange, borderRadius: BorderRadius.circular(18)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Dashboard Admin', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          const Text('Selamat datang, Admin Katchip', style: TextStyle(color: Colors.white70)),
+          const SizedBox(height: 12),
+          Row(
+            children: const [
+              Expanded(child: _SmallStatBox(title: 'Pesanan Hari Ini', field: 'countToday')),
+              SizedBox(width: 12),
+              Expanded(child: _SmallStatBox(title: 'Total Pendapatan', field: 'revenue30')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SmallStatBox extends StatelessWidget {
+  final String title;
+  final String field; // 'countToday' | 'revenue30'
+  const _SmallStatBox({required this.title, required this.field});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      child: FutureBuilder<_DashboardStats>(
+        future: _DashboardStats.load(),
+        builder: (context, snap) {
+          final stats = snap.data;
+          String value = '-';
+          if (stats != null) {
+            value = field == 'countToday' ? '${stats.countToday}' : _formatCurrency(stats.revenue30Days);
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+              const SizedBox(height: 8),
+              Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _QuickActions extends StatelessWidget {
+  const _QuickActions();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tile(IconData icon, String title, String subtitle, VoidCallback onTap, {Color color = Colors.orange}) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+          child: Row(children: [
+            CircleAvatar(backgroundColor: color.withValues(alpha: 0.15), child: Icon(icon, color: color)),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+            ])),
+            const Icon(Icons.chevron_right_rounded)
+          ]),
+        ),
+      );
+    }
+
+    return Column(children: [
+      tile(Icons.inventory_2_outlined, 'Kelola Pesanan', 'Lihat dan update status pesanan', () {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminOrdersPage()));
+      }),
+      tile(Icons.restaurant_menu_rounded, 'Kelola Menu', 'Atur ketersediaan dan stok menu', () {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminMenuPage()));
+      }, color: const Color(0xFFFF7A00)),
+      tile(Icons.payments_outlined, 'Kelola Pembayaran', 'Verifikasi pembayaran pelanggan', () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gunakan tab Pesanan di bawah')),
+        );
+      }, color: Colors.green),
+    ]);
+  }
+}
+
+class _PendingOrdersCard extends StatelessWidget {
+  const _PendingOrdersCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final orange = const Color(0xFFFF7A00);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: orange, borderRadius: BorderRadius.circular(16)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Pesanan Menunggu', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
+        FutureBuilder<int>(
+          future: _countPending(),
+          builder: (context, snap) {
+            final count = snap.data ?? 0;
+            return Row(children: [
+              Text('$count', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800)),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Perlu diproses segera', style: TextStyle(color: Colors.white70))),
+              OutlinedButton(
+                onPressed: () {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminOrdersPage()));
+                },
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white)),
+                child: const Text('Lihat'),
+              )
+            ]);
+          },
+        ),
+      ]),
+    );
+  }
+}
+
+class _DashboardStats {
+  final int countToday;
+  final int revenue30Days;
+  _DashboardStats({required this.countToday, required this.revenue30Days});
+
+  static Future<_DashboardStats> load() async {
+    final now = DateTime.now();
+    final startToday = DateTime(now.year, now.month, now.day);
+    final thirtyDaysAgo = now.subtract(const Duration(days: 30));
+
+    final db = FirebaseFirestore.instance;
+    final orders = await db.collectionGroup('orders')
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startToday))
+        .get();
+
+    final orders30 = await db.collectionGroup('orders')
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(thirtyDaysAgo))
+        .get();
+
+    final countToday = orders.size;
+    int revenue = 0;
+    for (final d in orders30.docs) {
+      revenue += ((d['total'] ?? 0) as num).round();
+    }
+    return _DashboardStats(countToday: countToday, revenue30Days: revenue);
+  }
+}
+
+String _formatCurrency(num v) {
+  final s = v.toInt().toString();
+  final buf = StringBuffer();
+  for (int i = 0; i < s.length; i++) {
+    final idx = s.length - i;
+    buf.write(s[i]);
+    if (idx > 1 && idx % 3 == 1) buf.write('.');
+  }
+  return 'Rp $buf';
+}
+
+Future<int> _countPending() async {
+  final db = FirebaseFirestore.instance;
+  final qs = await db.collectionGroup('orders').where('status', isEqualTo: 'pending').get();
+  return qs.size;
+}
