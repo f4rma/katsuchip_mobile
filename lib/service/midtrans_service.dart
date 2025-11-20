@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:midtrans_sdk/midtrans_sdk.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../config/api_keys.dart';
 
 class MidtransService {
-  // TODO: Ganti dengan API keys Anda dari Midtrans Dashboard
-  // Untuk production, simpan di Firebase Remote Config atau backend
-  static const String _clientKey = 'YOUR_CLIENT_KEY_HERE'; // contoh: SB-Mid-client-xxxxx
-  static const String _serverKey = 'YOUR_SERVER_KEY_HERE'; // contoh: SB-Mid-server-xxxxx
-  static const bool _isProduction = false; // Set true untuk production
+  // API keys diambil dari file terpisah yang di-gitignore
+  static String get _clientKey => ApiKeys.midtransClientKey;
+  static String get _serverKey => ApiKeys.midtransServerKey;
+  static bool get _isProduction => ApiKeys.midtransIsProduction;
 
   late MidtransSDK _midtransSDK;
 
