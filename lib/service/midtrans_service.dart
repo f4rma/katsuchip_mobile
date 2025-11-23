@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:midtrans_sdk/midtrans_sdk.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -22,17 +21,8 @@ class MidtransService {
     MidtransSDK.init(
       config: MidtransConfig(
         clientKey: _clientKey,
-        merchantBaseUrl: '', // Optional, untuk notification callback
-        colorTheme: ColorTheme(
-          colorPrimary: const Color(0xFFFF7A00),
-          colorPrimaryDark: const Color(0xFFFF7A00),
-          colorSecondary: const Color(0xFFFF7A00),
-        ),
+        merchantBaseUrl: '', // Optional
       ),
-    );
-    
-    _midtransSDK.setUIKitCustomSetting(
-      skipCustomerDetailsPages: true, // Skip input customer details (sudah ada di checkout)
     );
   }
 

@@ -183,17 +183,77 @@ class _ActionButtons extends StatelessWidget {
     List<Widget> actions() {
       switch (status) {
         case 'pending':
+          // Setelah pembayaran, admin mulai proses pesanan
           return [
-            btn('Konfirmasi Pesanan', () => _update(doc, 'confirmed', context)),
+            btn('Proses Pesanan', () => _update(doc, 'processing', context)),
             const SizedBox(height: 8),
             btn('Batalkan Pesanan', () => _update(doc, 'cancelled', context), color: Colors.grey),
           ];
-        case 'confirmed':
-          return [btn('Proses Pesanan', () => _update(doc, 'processing', context))];
         case 'processing':
-          return [btn('Kirim Pesanan', () => _update(doc, 'delivering', context))];
+          // Setelah selesai dimasak, serahkan ke kurir untuk diantar
+          return [btn('Antarkan (Serahkan ke Kurir)', () => _update(doc, 'delivering', context))];
         case 'delivering':
-          return [btn('Tandai Selesai', () => _update(doc, 'completed', context))];
+          // Status delivering dihandle oleh kurir, admin hanya monitor
+          return [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.local_shipping, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Pesanan sedang diantar oleh kurir',
+                      style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          ];
+        case 'delivered':
+          // Pesanan sudah selesai diantar oleh kurir
+          return [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Pesanan telah diterima pembeli',
+                      style: TextStyle(color: Colors.green, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          ];
+        case 'cancelled':
+          return [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Pesanan dibatalkan',
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
+              ),
+            )
+          ];
         default:
           return [const SizedBox.shrink()];
       }

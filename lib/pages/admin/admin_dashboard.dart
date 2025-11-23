@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'admin_appbar_actions.dart';
 import 'admin_menu.dart';
 import 'admin_orders.dart';
+import 'admin_kurir.dart';
 
 class AdminDashboardPage extends StatelessWidget {
   const AdminDashboardPage({super.key});
@@ -45,10 +46,7 @@ class _HeaderCards extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Dashboard Admin', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 2),
-          const Text('Selamat datang, Admin Katchip', style: TextStyle(color: Colors.white70)),
-          const SizedBox(height: 12),
+          
           Row(
             children: const [
               Expanded(child: _SmallStatBox(title: 'Pesanan Hari Ini', field: 'countToday')),
@@ -127,6 +125,9 @@ class _QuickActions extends StatelessWidget {
       tile(Icons.restaurant_menu_rounded, 'Kelola Menu', 'Atur ketersediaan dan stok menu', () {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminMenuPage()));
       }, color: const Color(0xFFFF7A00)),
+      tile(Icons.delivery_dining, 'Kelola Kurir', 'Tambah kurir baru dan kelola akun', () {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminKurirPage()));
+      }, color: Colors.blue),
       tile(Icons.payments_outlined, 'Kelola Pembayaran', 'Verifikasi pembayaran pelanggan', () {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Gunakan tab Pesanan di bawah')),

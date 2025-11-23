@@ -294,14 +294,16 @@ String _paymentLabel(String? code) {
 String _statusLabel(String s) {
   switch (s.toLowerCase()) {
     case 'pending':
-      return 'Diproses';
-    case 'paid':
-      return 'Dibayar';
-    case 'completed':
-      return 'Selesai';
-    case 'canceled':
+      return 'Menunggu Pembayaran';
+    case 'processing':
+      return 'Sedang Diproses';
+    case 'delivering':
+      return 'Sedang Diantar';
+    case 'delivered':
+      return 'Pesanan Diterima';
+    case 'cancelled':
       return 'Dibatalkan';
     default:
-      return 'Diproses';
+      return 'Menunggu';
   }
 }

@@ -12,10 +12,11 @@ class NotificationService {
     required String adminId,
   }) async {
     try {
-      // Ambil semua kurir
+      // Ambil semua kurir yang aktif
       final couriersSnapshot = await _db
           .collection('users')
           .where('role', isEqualTo: 'courier')
+          .where('isActive', isEqualTo: true)
           .get();
 
       final batch = _db.batch();

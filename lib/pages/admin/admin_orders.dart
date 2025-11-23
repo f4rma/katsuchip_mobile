@@ -42,10 +42,9 @@ class _StatusTabs extends StatelessWidget {
     final items = const [
       ['all', 'Semua'],
       ['pending', 'Menunggu'],
-      ['confirmed', 'Dikonfirmasi'],
       ['processing', 'Diproses'],
       ['delivering', 'Diantar'],
-      ['completed', 'Selesai'],
+      ['delivered', 'Selesai'],
       ['cancelled', 'Batal'],
     ];
     return SingleChildScrollView(
@@ -240,19 +239,36 @@ class _StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color c;
+    String label;
     switch (status) {
-      case 'pending': c = Colors.grey; break;
-      case 'confirmed': c = Colors.blue; break;
-      case 'processing': c = Colors.orange; break;
-      case 'delivering': c = Colors.purple; break;
-      case 'completed': c = Colors.green; break;
-      case 'cancelled': c = Colors.black45; break;
-      default: c = Colors.grey;
+      case 'pending': 
+        c = Colors.grey; 
+        label = 'Menunggu';
+        break;
+      case 'processing': 
+        c = Colors.orange; 
+        label = 'Diproses';
+        break;
+      case 'delivering': 
+        c = Colors.blue; 
+        label = 'Diantar';
+        break;
+      case 'delivered': 
+        c = Colors.green; 
+        label = 'Selesai';
+        break;
+      case 'cancelled': 
+        c = Colors.red; 
+        label = 'Batal';
+        break;
+      default: 
+        c = Colors.grey;
+        label = status;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-  decoration: BoxDecoration(color: c.withValues(alpha: .15), borderRadius: BorderRadius.circular(14)),
-      child: Text(status, style: TextStyle(color: c, fontWeight: FontWeight.w700, fontSize: 12)),
+      decoration: BoxDecoration(color: c.withValues(alpha: .15), borderRadius: BorderRadius.circular(14)),
+      child: Text(label, style: TextStyle(color: c, fontWeight: FontWeight.w700, fontSize: 12)),
     );
   }
 }

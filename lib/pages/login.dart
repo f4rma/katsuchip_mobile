@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'package:firebase_auth/firebase_auth.dart';
 import '../service/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -114,7 +114,25 @@ class _LoginPageState extends State<LoginPage> {
                       if (!mounted) return;
                       Navigator.of(context).pushReplacementNamed(route);
                     } catch (e) {
-                      setState(() { _error = e.toString(); });
+                      String errorMessage = 'Terjadi kesalahan saat login';
+                      if (e is FirebaseAuthException) {
+                        if (e.code == 'user-not-found') {
+                          errorMessage = 'Email tidak terdaftar';
+                        } else if (e.code == 'wrong-password') {
+                          errorMessage = 'Password salah';
+                        } else if (e.code == 'invalid-email') {
+                          errorMessage = 'Format email tidak valid';
+                        } else if (e.code == 'user-disabled') {
+                          errorMessage = 'Akun telah dinonaktifkan';
+                        } else {
+                          errorMessage = e.message ?? errorMessage;
+                        }
+                      } else if (e is Exception) {
+                        errorMessage = e.toString().replaceFirst('Exception: ', '');
+                      } else {
+                        errorMessage = e.toString();
+                      }
+                      setState(() { _error = errorMessage; });
                     } finally {
                       if (mounted) setState(() { _loading = false; });
                     }

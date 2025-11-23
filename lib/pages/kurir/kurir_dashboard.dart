@@ -21,6 +21,56 @@ class _KurirDashboardState extends State<KurirDashboard> {
   void initState() {
     super.initState();
     _muatNamaKurir();
+    _checkActiveStatus();
+  }
+
+  /// Real-time check status aktif kurir
+  void _checkActiveStatus() {
+    final uid = AuthService().currentUser?.uid;
+    if (uid == null) return;
+    
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .listen((doc) {
+      if (!mounted) return;
+      
+      final isActive = doc.data()?['isActive'] as bool?;
+      
+      // Jika dinonaktifkan, auto logout
+      if (isActive == false) {
+        _showDeactivatedDialog();
+      }
+    });
+  }
+
+  void _showDeactivatedDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Akun Dinonaktifkan'),
+        content: const Text(
+          'Akun Anda telah dinonaktifkan oleh admin.\n\n'
+          'Silakan hubungi admin untuk informasi lebih lanjut.',
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () async {
+              await AuthService().signOut();
+              if (mounted) {
+                Navigator.of(context).pushNamedAndRemoveUntil(
+                  '/login',
+                  (route) => false,
+                );
+              }
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _muatNamaKurir() async {
