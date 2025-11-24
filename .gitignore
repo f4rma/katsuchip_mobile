@@ -54,3 +54,11 @@ GoogleService-Info.plist
 
 # API keys configuration (keep .example file only)
 lib/config/api_keys.dart
+
+# Documentation files (keep README.md only)
+*_GUIDE.md
+*_SETUP.md
+*_SYSTEM.md
+*_INTEGRATION.md
+BEST_PRACTICES.md
+ROUTE_OPTIMIZATION_GUIDE.md
