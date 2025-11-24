@@ -11,6 +11,7 @@ import 'service/cart_repository.dart';
 import 'package:katsuchip_app/pages/splash_screen.dart';
 import 'package:katsuchip_app/pages/login.dart';
 import 'package:katsuchip_app/pages/register.dart';
+import 'package:katsuchip_app/pages/register_kurir.dart';
 import 'package:katsuchip_app/pages/orders.dart';
 import 'package:katsuchip_app/pages/profile_setup.dart';
 import 'pages/profile.dart';
@@ -39,6 +40,7 @@ class AppRoot extends StatelessWidget {
         '/auth': (context) => const LoginPage(),
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
+        '/register-kurir': (context) => const RegisterKurirPage(),
         '/profile': (_) => const ProfilePage(),
         '/setup':  (_) => const ProfileSetupPage(),
         '/main': (context) => const MyApp(),

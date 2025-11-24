@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'admin_appbar_actions.dart';
+import '../../utils/error_handler.dart';
 
 class AdminKurirPage extends StatelessWidget {
   const AdminKurirPage({super.key});
@@ -298,54 +299,116 @@ class _AddKurirPageState extends State<_AddKurirPage> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Create Firebase Auth user
-      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-
-      final uid = credential.user!.uid;
-
-      // 2. Create Firestore document
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+      // Simpan sebagai "pending approval" di collection kurir_invitations
+      final invitationDoc = FirebaseFirestore.instance.collection('kurir_invitations').doc();
+      
+      await invitationDoc.set({
         'email': _emailController.text.trim(),
+        'tempPassword': _passwordController.text,
         'name': _nameController.text.trim(),
-        'role': 'kurir',
         'phone': _phoneController.text.trim(),
-        'isActive': true,
+        'vehicleType': _vehicleController.text.trim(),
+        'licensePlate': _plateController.text.trim(),
+        'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
-        'courierProfile': {
-          'vehicleType': _vehicleController.text.trim(),
-          'licensePlate': _plateController.text.trim(),
-        }
+        'createdBy': FirebaseAuth.instance.currentUser?.uid,
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Kurir ${_nameController.text} berhasil didaftarkan'),
-            backgroundColor: Colors.green,
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 28),
+                SizedBox(width: 12),
+                Text('Undangan Dibuat'),
+              ],
+            ),
+              content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Kirimkan informasi berikut ke calon kurir:'),
+                const Divider(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Template pesan WhatsApp/SMS:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Halo ${_nameController.text.trim()},\n\n'
+                        'Anda diundang jadi kurir KatsuChip.\n'
+                        'Registrasi dengan:\n\n'
+                        'Email: ${_emailController.text.trim()}\n'
+                        'Password: ${_passwordController.text}\n\n'
+                        'Buka aplikasi KatsuChip lalu pilih "Daftar Sebagai Kurir"',
+                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Color(0xFFFF7A00), size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Undangan hanya berlaku 1x dan kredensial akan dihapus otomatis setelah registrasi',
+                          style: TextStyle(fontSize: 11, color: Colors.black87),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); // Close dialog
+                  Navigator.pop(context); // Back to list
+                },
+                child: const Text('OK, Mengerti'),
+              ),
+            ],
           ),
         );
-        Navigator.pop(context);
       }
-    } on FirebaseAuthException catch (e) {
-      String message = 'Gagal mendaftarkan kurir';
-      if (e.code == 'email-already-in-use') {
-        message = 'Email sudah digunakan';
-      } else if (e.code == 'weak-password') {
-        message = 'Password terlalu lemah (min 6 karakter)';
-      }
-      
+    } on FirebaseException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(ErrorHandler.getFirestoreErrorMessage(e)),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(ErrorHandler.getAuthErrorMessage(e)),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {

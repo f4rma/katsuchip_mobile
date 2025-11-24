@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function untuk check role
+    function isAdmin() {
+      return request.auth != null && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isKurir() {
+      return request.auth != null && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kurir';
+    }
+    
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Admin bisa read semua user, User bisa read data sendiri
+      allow read: if isAdmin() || isOwner(userId);
+      
+      // Admin bisa create user baru (untuk registrasi kurir), atau customer self-register
+      allow create: if isAdmin() || 
+                       (request.auth != null && 
+                        request.resource.data.role == 'customer' &&
+                        request.auth.uid == userId);
+      
+      // Admin bisa update isActive dan field lainnya
+      allow update: if isAdmin();
+      
+      // User bisa update data sendiri (kecuali role dan isActive)
+      allow update: if isOwner(userId) && 
+                       !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isActive']);
+      
+      // Subcollection: notifications
+      match /notifications/{notifId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      
+      // Subcollection: deliveries
+      match /deliveries/{deliveryId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId);
+      }
+    }
+    
+    // Orders collection
+    match /orders/{orderId} {
+      // Admin bisa baca dan update semua order
+      allow read, write: if isAdmin();
+      
+      // Kurir bisa baca order yang statusnya waiting_pickup atau on_delivery
+      allow read: if isKurir();
+      
+      // Kurir bisa update order (untuk update status pengiriman)
+      allow update: if isKurir();
+      
+      // User yang buat order bisa baca order sendiri
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      
+      // User bisa create order sendiri
+      allow create: if request.auth != null;
+    }
+    
+    // Orders subcollection (untuk collectionGroup query di laporan)
+    match /{path=**}/orders/{orderId} {
+      // Admin bisa query semua orders dari collectionGroup
+      allow read: if isAdmin();
+      
+      // Kurir bisa read orders
+      allow read: if isKurir();
+      
+      // User bisa baca order sendiri
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      
+      // Allow write untuk admin dan kurir
+      allow write: if isAdmin() || isKurir();
+    }
+    
+    // Menu collection (nama collection: 'menus')
+    match /menus/{menuId} {
+      // Public bisa baca menu (untuk tampilan app)
+      allow read: if true;
+      
+      // Hanya admin yang bisa create, update, delete menu
+      allow write: if isAdmin();
+    }
+    
+    // Cart collection
+    match /cart/{cartId} {
+      // User hanya bisa baca/write cart sendiri
+      allow read, write: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null;
+    }
+    
+    // Notifications collection (global, jika ada)
+    match /notifications/{notifId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+    
+    // Kurir invitations collection
+    match /kurir_invitations/{invitationId} {
+      // Admin bisa CRUD semua invitation
+      allow read, write: if isAdmin();
+      
+      // Kurir bisa read invitation dengan emailnya sendiri (untuk aktivasi)
+      allow read: if request.auth != null && 
+                     request.auth.token.email == resource.data.email;
+    }
+  }
+}

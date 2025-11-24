@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:random_string/random_string.dart';
 import '../models/models.dart';
+import 'geocoding_service.dart';
 
 class CartRepository {
   final _db = FirebaseFirestore.instance;
@@ -59,6 +60,20 @@ class CartRepository {
   }) async {
     final doc = _orderCol(uid).doc();
     final code = randomAlphaNumeric(6).toUpperCase();
+    
+    // Geocode alamat pengiriman untuk route optimization
+    final address = shippingAddress['address'] as String? ?? '';
+    Map<String, double>? coordinates;
+    
+    if (address.isNotEmpty) {
+      try {
+        coordinates = await GeocodingService.getCoordinates(address);
+      } catch (e) {
+        print('Geocoding error: $e');
+        // Continue without coordinates
+      }
+    }
+    
     await doc.set({
       'id': doc.id,
       'userId': uid,
@@ -77,6 +92,10 @@ class CartRepository {
       'paymentMethod': paymentMethod,
       'status': 'pending',
       'paymentStatus': 'unpaid',
+      // Tambahkan koordinat untuk route optimization
+      'latitude': coordinates?['latitude'] ?? 0,
+      'longitude': coordinates?['longitude'] ?? 0,
+      'address': address, // Alamat lengkap untuk display
     });
 
     // kosongkan cart

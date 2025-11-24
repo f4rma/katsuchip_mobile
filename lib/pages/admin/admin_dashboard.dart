@@ -183,20 +183,28 @@ class _DashboardStats {
     final thirtyDaysAgo = now.subtract(const Duration(days: 30));
 
     final db = FirebaseFirestore.instance;
-    final orders = await db.collectionGroup('orders')
+    
+    // Query untuk pesanan hari ini
+    final ordersToday = await db.collectionGroup('orders')
         .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startToday))
         .get();
 
+    // Query untuk pendapatan 30 hari terakhir
     final orders30 = await db.collectionGroup('orders')
         .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(thirtyDaysAgo))
         .get();
 
-    final countToday = orders.size;
-    int revenue = 0;
-    for (final d in orders30.docs) {
-      revenue += ((d['total'] ?? 0) as num).round();
+    final countToday = ordersToday.size;
+    
+    // Hitung total pendapatan dari 30 hari
+    int totalRevenue = 0;
+    for (final doc in orders30.docs) {
+      final data = doc.data();
+      final total = (data['total'] ?? 0) as num;
+      totalRevenue += total.round();
     }
-    return _DashboardStats(countToday: countToday, revenue30Days: revenue);
+    
+    return _DashboardStats(countToday: countToday, revenue30Days: totalRevenue);
   }
 }
 

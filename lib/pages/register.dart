@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
- 
 import 'package:katsuchip_app/service/auth_service.dart';
+import 'package:katsuchip_app/utils/error_handler.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -111,7 +111,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       // Arahkan ke form pengisian data awal
                       Navigator.of(context).pushReplacementNamed('/setup');
                     } catch (e) {
-                      setState(() { _error = e.toString(); });
+                      setState(() { _error = ErrorHandler.getAuthErrorMessage(e); });
                     } finally {
                       if (mounted) setState(() { _loading = false; });
                     }
@@ -137,6 +137,16 @@ class _RegisterPageState extends State<RegisterPage> {
                   Navigator.of(context).pushReplacementNamed('/login');
                 },
                 child: const Text('Sudah punya akun? Masuk'),
+              ),
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pushNamed('/register-kurir');
+                },
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFFF7A00),
+                ),
+                child: const Text('Daftar Sebagai Kurir →'),
               ),
             ],
           ),
