@@ -1,4 +1,4 @@
-# 🍗 KatsuChip - Food Delivery App
+# KatsuChip - Food Delivery App
 
 Aplikasi delivery makanan berbasis Flutter dengan integrasi Firebase, Midtrans Payment Gateway, dan sistem kurir real-time.
 
