@@ -17,7 +17,7 @@ import 'package:katsuchip_app/pages/profile_setup.dart';
 import 'pages/profile.dart';
 import 'pages/admin/admin_main.dart';
 import 'pages/kurir/kurir_dashboard.dart';
-import 'pages/midtrans_payment.dart';
+// import 'pages/midtrans_payment.dart'; // Dinonaktifkan sementara
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -146,17 +146,40 @@ class _MyAppState extends State<MyApp> {
           );
           
           if (mounted) {
-            // Launch Midtrans payment
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => MidtransPaymentPage(
-                  orderId: orderInfo['orderId']!,
-                  orderCode: orderInfo['orderCode']!,
-                  total: total,
-                  items: _cart,
-                  shippingAddress: address,
+            // Pembayaran Midtrans dinonaktifkan sementara
+            // Tampilkan dialog konfirmasi pesanan
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Pesanan Berhasil Dibuat'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Kode Pesanan: ${orderInfo['orderCode']}'),
+                    const SizedBox(height: 8),
+                    Text('Total: Rp ${total.toInt().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}'),
+                    const SizedBox(height: 8),
+                    Text('Metode Pembayaran: $payment'),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Pesanan Anda akan diproses setelah pembayaran dikonfirmasi oleh admin.',
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ],
                 ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context); // Close dialog
+                      setState(() {
+                        _cart.clear();
+                        _selectedIndex = 1; // Pindah ke tab Orders
+                      });
+                    },
+                    child: const Text('OK'),
+                  ),
+                ],
               ),
             );
           }
