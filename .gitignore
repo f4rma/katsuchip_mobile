@@ -47,6 +47,7 @@ app.*.map.json
 # Sensitive files - DO NOT COMMIT
 google-services.json
 GoogleService-Info.plist
+lib/firebase_options.dart
 .env
 *.key
 *.keystore
