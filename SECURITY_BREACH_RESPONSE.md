@@ -2,7 +2,7 @@
 
 ## ⚠️ Status: URGENT - Memerlukan Tindakan Segera
 
-File `lib/firebase_options.dart` dengan Google API key `AIzaSyDoeeHEJHAOQSh66timbcgcAqY30ACifzc` telah ter-commit dan ter-push ke repository GitHub.
+File `lib/firebase_options.dart` dengan Google API key terekspos telah ter-commit ke repository GitHub (belum di-push).
 
 ---
 
@@ -24,7 +24,7 @@ File `lib/firebase_options.dart` dengan Google API key `AIzaSyDoeeHEJHAOQSh66tim
 1. Buka [Google Cloud Console](https://console.cloud.google.com/)
 2. Pilih project **katsuchip-65298**
 3. Navigasi ke: **APIs & Services** → **Credentials**
-4. Cari API key: `AIzaSyDoeeHEJHAOQSh66timbcgcAqY30ACifzc`
+4. Cari API key yang terekspos (lihat di commit history lama)
 5. Klik **⋮** (three dots) → **Delete** atau **Regenerate**
 6. **Generate API key baru** untuk menggantikannya
 
