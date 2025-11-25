@@ -138,16 +138,6 @@ class _RegisterPageState extends State<RegisterPage> {
                 },
                 child: const Text('Sudah punya akun? Masuk'),
               ),
-              const SizedBox(height: 4),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pushNamed('/register-kurir');
-                },
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFFFF7A00),
-                ),
-                child: const Text('Daftar Sebagai Kurir →'),
-              ),
             ],
           ),
         ),

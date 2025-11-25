@@ -107,9 +107,14 @@ service cloud.firestore {
       // Admin bisa CRUD semua invitation
       allow read, write: if isAdmin();
       
-      // Kurir bisa read invitation dengan emailnya sendiri (untuk aktivasi)
-      allow read: if request.auth != null && 
-                     request.auth.token.email == resource.data.email;
+      // Public read dengan token validation (untuk halaman register kurir)
+      // Hanya bisa read jika status = pending dan token belum expired
+      allow read: if resource.data.status == 'pending' && 
+                     resource.data.tokenExpiry > request.time;
+      
+      // Allow delete untuk kurir yang sudah registrasi (cleanup)
+      allow delete: if request.auth != null && 
+                       request.auth.token.email == resource.data.email;
     }
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'admin_appbar_actions.dart';
 import '../../utils/error_handler.dart';
 
@@ -299,8 +300,11 @@ class _AddKurirPageState extends State<_AddKurirPage> {
     setState(() => _isLoading = true);
 
     try {
+      // Generate unique invitation token
+      final invitationToken = FirebaseFirestore.instance.collection('kurir_invitations').doc().id;
+      
       // Simpan sebagai "pending approval" di collection kurir_invitations
-      final invitationDoc = FirebaseFirestore.instance.collection('kurir_invitations').doc();
+      final invitationDoc = FirebaseFirestore.instance.collection('kurir_invitations').doc(invitationToken);
       
       await invitationDoc.set({
         'email': _emailController.text.trim(),
@@ -310,55 +314,119 @@ class _AddKurirPageState extends State<_AddKurirPage> {
         'vehicleType': _vehicleController.text.trim(),
         'licensePlate': _plateController.text.trim(),
         'status': 'pending',
+        'invitationToken': invitationToken,
+        'tokenExpiry': DateTime.now().add(const Duration(days: 7)), // 7 hari expire
         'createdAt': FieldValue.serverTimestamp(),
         'createdBy': FirebaseAuth.instance.currentUser?.uid,
       });
+
+      // Generate invitation link
+      final invitationLink = 'https://katsuchip.com/register-kurir?token=$invitationToken';
+      // TODO: Implement proper deep linking for production
+
+      // Kirim email via Cloud Function
+      bool emailSent = false;
+      String emailStatus = 'Mengirim email...';
+      
+      try {
+        final functions = FirebaseFunctions.instance;
+        final callable = functions.httpsCallable('sendInvitationEmail');
+        
+        final result = await callable.call({
+          'email': _emailController.text.trim(),
+          'name': _nameController.text.trim(),
+          'invitationToken': invitationToken,
+        });
+        
+        emailSent = result.data['success'] == true;
+        emailStatus = emailSent 
+          ? '✅ Email berhasil dikirim ke ${_emailController.text.trim()}'
+          : '❌ Gagal mengirim email';
+      } catch (e) {
+        print('Error sending email: $e');
+        emailStatus = '⚠️ Email gagal dikirim (${e.toString()}). Kirim link manual.';
+      }
 
       if (mounted) {
         showDialog(
           context: context,
           barrierDismissible: false,
           builder: (context) => AlertDialog(
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 28),
-                SizedBox(width: 12),
-                Text('Undangan Dibuat'),
+                Icon(
+                  emailSent ? Icons.check_circle : Icons.info, 
+                  color: emailSent ? Colors.green : Colors.orange, 
+                  size: 28
+                ),
+                const SizedBox(width: 12),
+                Text(emailSent ? 'Undangan Terkirim' : 'Undangan Dibuat'),
               ],
             ),
               content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Kirimkan informasi berikut ke calon kurir:'),
-                const Divider(height: 24),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
+                    color: emailSent ? Colors.green.shade50 : Colors.orange.shade50,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.shade200),
+                    border: Border.all(
+                      color: emailSent ? Colors.green.shade200 : Colors.orange.shade200
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      const Text(
-                        'Template pesan WhatsApp/SMS:',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      Icon(
+                        emailSent ? Icons.email : Icons.warning_amber,
+                        color: emailSent ? Colors.green : Colors.orange,
+                        size: 20,
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Halo ${_nameController.text.trim()},\n\n'
-                        'Anda diundang jadi kurir KatsuChip.\n'
-                        'Registrasi dengan:\n\n'
-                        'Email: ${_emailController.text.trim()}\n'
-                        'Password: ${_passwordController.text}\n\n'
-                        'Buka aplikasi KatsuChip lalu pilih "Daftar Sebagai Kurir"',
-                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          emailStatus,
+                          style: const TextStyle(fontSize: 13),
+                        ),
                       ),
                     ],
                   ),
                 ),
+                if (!emailSent) ...[
+                  const Divider(height: 24),
+                  const Text('Kirimkan link invitation berikut secara manual:'),
+                  const SizedBox(height: 12),
+                ],
+                if (!emailSent)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Template pesan WhatsApp/Email:',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                        const SizedBox(height: 8),
+                        SelectableText(
+                          'Halo ${_nameController.text.trim()},\n\n'
+                          'Anda diundang jadi kurir KatsuChip.\n'
+                          'Klik link berikut untuk registrasi:\n\n'
+                          '$invitationLink\n\n'
+                          'Email: ${_emailController.text.trim()}\n'
+                          'Password: ${_passwordController.text}\n\n'
+                          'Link berlaku 7 hari.',
+                          style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -366,14 +434,16 @@ class _AddKurirPageState extends State<_AddKurirPage> {
                     color: Colors.orange.shade50,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.info_outline, color: Color(0xFFFF7A00), size: 20),
-                      SizedBox(width: 8),
+                      const Icon(Icons.info_outline, color: Color(0xFFFF7A00), size: 20),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Undangan hanya berlaku 1x dan kredensial akan dihapus otomatis setelah registrasi',
-                          style: TextStyle(fontSize: 11, color: Colors.black87),
+                          emailSent 
+                            ? 'Email sudah dikirim otomatis. Link berlaku 7 hari dan hanya bisa digunakan 1x.'
+                            : 'Link invitation berlaku 7 hari dan hanya bisa digunakan 1x. Token akan expire otomatis setelah registrasi.',
+                          style: const TextStyle(fontSize: 11, color: Colors.black87),
                         ),
                       ),
                     ],

@@ -35,12 +35,23 @@ class AppRoot extends StatelessWidget {
       theme: ThemeData(scaffoldBackgroundColor: const Color(0xFFFFF7ED)),
       debugShowCheckedModeBanner: false,
       initialRoute: '/',
+      onGenerateRoute: (settings) {
+        // Handle /register-kurir?token=xxx
+        if (settings.name != null && settings.name!.startsWith('/register-kurir')) {
+          final uri = Uri.parse(settings.name!);
+          final token = uri.queryParameters['token'];
+          return MaterialPageRoute(
+            builder: (context) => RegisterKurirPage(invitationToken: token),
+          );
+        }
+        
+        return null; // Let routes handle other paths
+      },
       routes: {
         '/': (context) => const Splashscreen(),
         '/auth': (context) => const LoginPage(),
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
-        '/register-kurir': (context) => const RegisterKurirPage(),
         '/profile': (_) => const ProfilePage(),
         '/setup':  (_) => const ProfileSetupPage(),
         '/main': (context) => const MyApp(),
