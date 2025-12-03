@@ -2,32 +2,32 @@
 
 Aplikasi delivery makanan berbasis Flutter dengan integrasi Firebase, Midtrans Payment Gateway, dan sistem kurir real-time.
 
-## ✨ Features
+## Features
 
-### 👥 **Multi-Role System**
+### **Multi-Role System**
 - **Customer**: Browse menu, order, track delivery
 - **Admin**: Kelola menu, pesanan, dan verifikasi pembayaran
 - **Kurir**: Terima pesanan, update status delivery, navigasi Google Maps
 
-### 💳 **Payment Gateway**
+### **Payment Gateway**
 - Integrasi Midtrans
 - QRIS, GoPay, ShopeePay
 - Transfer Bank (BCA, BNI, BRI, Mandiri, Bank Nagari)
 
-### 🚚 **Delivery System**
+###  **Delivery System**
 - Real-time order tracking
 - Google Maps navigation untuk kurir
 - Push notifications (Admin ↔ Kurir ↔ Customer)
 - Status tracking: waiting pickup → on delivery → delivered
 
-### 🔐 **Authentication**
+###  **Authentication**
 - Email & password
 - Google Sign-In
 - Role-based routing
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Flutter SDK ^3.9.0
@@ -64,7 +64,7 @@ flutter run
 
 ---
 
-## 📚 Documentation
+##  Documentation
 
 - **[API Keys Setup](API_KEYS_SETUP.md)** - Cara setup Midtrans API keys
 - **[Midtrans Integration](MIDTRANS_INTEGRATION.md)** - Panduan lengkap payment gateway
@@ -72,7 +72,7 @@ flutter run
 
 ---
 
-## 🏗️ Tech Stack
+##  Tech Stack
 
 - **Framework**: Flutter 3.9+
 - **Backend**: Firebase (Firestore, Auth, Storage)
@@ -89,7 +89,7 @@ _(Coming soon)_
 
 ---
 
-## 🔒 Security
+##  Security
 
 - API keys disimpan di file terpisah (`lib/config/api_keys.dart`) yang di-gitignore
 - Firebase Security Rules untuk protect data
@@ -97,19 +97,19 @@ _(Coming soon)_
 
 ---
 
-## 🤝 Contributing
+##  Contributing
 
 Pull requests are welcome! Untuk perubahan major, silakan buka issue dulu untuk diskusi.
 
 ---
 
-## 📄 License
+##  License
 
 This project is for educational purposes.
 
 ---
 
-## 👨‍💻 Developer
+##  Developer
 
 **Developed with ❤️ for KatsuChip**
 
