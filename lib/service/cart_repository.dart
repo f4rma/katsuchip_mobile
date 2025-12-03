@@ -31,17 +31,36 @@ class CartRepository {
   }
 
   Future<void> increment(String uid, MenuItemData item, int by) async {
+    print('📦 CartRepository.increment:');
+    print('   UID: $uid');
+    print('   Item: ${item.name} (${item.id})');
+    print('   By: $by');
+    print('   Path: users/$uid/cart/${item.id}');
+    
     final ref = _cartCol(uid).doc(item.id);
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      int qty = (snap.data()?['qty'] as num?)?.toInt() ?? 0;
-      qty += by;
-      if (qty <= 0) {
-        tx.delete(ref);
-      } else {
-        tx.set(ref, {'item': item.toMap(), 'qty': qty});
-      }
-    });
+    
+    try {
+      await _db.runTransaction((tx) async {
+        final snap = await tx.get(ref);
+        int qty = (snap.data()?['qty'] as num?)?.toInt() ?? 0;
+        qty += by;
+        
+        print('   Current qty: ${qty - by}, New qty: $qty');
+        
+        if (qty <= 0) {
+          tx.delete(ref);
+          print('   Action: DELETE');
+        } else {
+          tx.set(ref, {'item': item.toMap(), 'qty': qty});
+          print('   Action: SET qty=$qty');
+        }
+      });
+      
+      print('✅ Cart transaction successful');
+    } catch (e) {
+      print('❌ Cart transaction failed: $e');
+      rethrow;
+    }
   }
 
   Future<void> clear(String uid) async {
@@ -61,18 +80,44 @@ class CartRepository {
     final doc = _orderCol(uid).doc();
     final code = randomAlphaNumeric(6).toUpperCase();
     
+    // Ambil data user untuk pelengkap jika diperlukan
+    final userDoc = await _db.collection('users').doc(uid).get();
+    final userData = userDoc.data() ?? {};
+    
+    // Pastikan shippingAddress sudah dalam format lengkap
+    final recipientName = shippingAddress['name'] as String? ?? 
+                          userData['name'] as String? ?? 'Customer';
+    final recipientPhone = shippingAddress['phone'] as String? ?? 
+                           userData['phone'] as String? ?? '-';
+    
     // Geocode alamat pengiriman untuk route optimization
-    final address = shippingAddress['address'] as String? ?? '';
+    final address = shippingAddress['address'] as String? ?? 
+                    shippingAddress['detail'] as String? ?? '';
     Map<String, double>? coordinates;
     
     if (address.isNotEmpty) {
       try {
+        // Coba geocode dengan alamat lengkap
         coordinates = await GeocodingService.getCoordinates(address);
+        print('✓ Geocoding berhasil: ${coordinates?['latitude']}, ${coordinates?['longitude']}');
       } catch (e) {
-        print('Geocoding error: $e');
-        // Continue without coordinates
+        print('⚠ Geocoding error: $e');
+        // Continue without coordinates - order tetap dibuat
       }
     }
+    
+    // Normalize shippingAddress ke format baru yang lengkap
+    final normalizedShippingAddress = {
+      'name': recipientName,
+      'phone': recipientPhone,
+      'address': address,
+      'latitude': coordinates?['latitude'],
+      'longitude': coordinates?['longitude'],
+      // Simpan juga data lama untuk backward compatibility
+      if (shippingAddress['id'] != null) 'id': shippingAddress['id'],
+      if (shippingAddress['title'] != null) 'title': shippingAddress['title'],
+      if (shippingAddress['detail'] != null) 'detail': shippingAddress['detail'],
+    };
     
     await doc.set({
       'id': doc.id,
@@ -88,14 +133,14 @@ class CartRepository {
                 'qty': e.qty,
               })
           .toList(),
-      'shippingAddress': shippingAddress,
+      'shippingAddress': normalizedShippingAddress,
       'paymentMethod': paymentMethod,
       'status': 'pending',
       'paymentStatus': 'unpaid',
-      // Tambahkan koordinat untuk route optimization
+      // Koordinat di root level untuk route optimization & query
       'latitude': coordinates?['latitude'] ?? 0,
       'longitude': coordinates?['longitude'] ?? 0,
-      'address': address, // Alamat lengkap untuk display
+      'address': address, // Alamat lengkap untuk display & geocoding
     });
 
     // kosongkan cart

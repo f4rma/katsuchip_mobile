@@ -209,21 +209,38 @@ class ProfilePage extends StatelessWidget {
     );
 
     if (ok == true) {
-      final name = nameC.text.trim();
-      final phone = phoneC.text.trim();
-      if (name.isNotEmpty) {
-        await user.updateDisplayName(name);
-      }
-      if (phone.isNotEmpty) {
-        // validasi sederhana
-        final isValid = RegExp(r'^(?:\+62|0)\d{8,15}$').hasMatch(phone);
-        if (!isValid) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Format nomor telepon tidak valid')));
-          }
-          return;
+      try {
+        final name = nameC.text.trim();
+        final phone = phoneC.text.trim();
+        if (name.isNotEmpty) {
+          await user.updateDisplayName(name);
         }
-        await userDoc.set({'phone': phone, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+        if (phone.isNotEmpty) {
+          // validasi sederhana
+          final isValid = RegExp(r'^(?:\+62|0)\d{8,15}$').hasMatch(phone);
+          if (!isValid) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Format nomor telepon tidak valid')));
+            }
+            return;
+          }
+          await userDoc.set({'phone': phone, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+        }
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profil berhasil diperbarui'),
+              backgroundColor: Color(0xFFFF7A00),
+            ),
+          );
+        }
+      } catch (e) {
+        print('Error updating profile: $e');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Gagal memperbarui profil: $e')),
+          );
+        }
       }
     }
   }
@@ -282,20 +299,37 @@ class ProfilePage extends StatelessWidget {
         }
         return;
       }
-      if (isEdit) {
-        await addrCol.doc(docId).set({
-          'title': title,
-          'detail': detail,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      } else {
-        final id = addrCol.doc().id;
-        await addrCol.doc(id).set({
-          'id': id,
-          'title': title,
-          'detail': detail,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+      try {
+        if (isEdit) {
+          await addrCol.doc(docId).set({
+            'title': title,
+            'detail': detail,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        } else {
+          final id = addrCol.doc().id;
+          await addrCol.doc(id).set({
+            'id': id,
+            'title': title,
+            'detail': detail,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isEdit ? 'Alamat berhasil diperbarui' : 'Alamat berhasil ditambahkan'),
+              backgroundColor: const Color(0xFFFF7A00),
+            ),
+          );
+        }
+      } catch (e) {
+        print('Error saving address: $e');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Gagal menyimpan alamat: $e')),
+          );
+        }
       }
     }
   }

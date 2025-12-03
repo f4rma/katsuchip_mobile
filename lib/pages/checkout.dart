@@ -22,9 +22,49 @@ class CheckoutPage extends StatefulWidget {
 class _CheckoutPageState extends State<CheckoutPage> {
   String? _selectedAddrId;
   String? _payment; // 'qris' | 'nagari' | 'bri' | 'mandiri'
+  
+  // Controllers untuk data penerima
+  final _recipientNameController = TextEditingController();
+  final _recipientPhoneController = TextEditingController();
+  bool _isLoadingUserData = true;
 
   int get _subtotal =>
       widget.items.fold(0, (p, e) => p + (e.item.price * e.qty));
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+  
+  Future<void> _loadUserData() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      
+      if (userDoc.exists) {
+        final data = userDoc.data()!;
+        _recipientNameController.text = data['name'] as String? ?? '';
+        _recipientPhoneController.text = data['phone'] as String? ?? '';
+      }
+    } catch (e) {
+      print('Error loading user data: $e');
+    } finally {
+      setState(() => _isLoadingUserData = false);
+    }
+  }
+  
+  @override
+  void dispose() {
+    _recipientNameController.dispose();
+    _recipientPhoneController.dispose();
+    super.dispose();
+  }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> _addrStream(String uid) {
     return FirebaseFirestore.instance
@@ -98,9 +138,62 @@ class _CheckoutPageState extends State<CheckoutPage> {
           ),
           const SizedBox(height: 14),
 
+          // Data Penerima
+          _CardSection(
+            title: 'Data Penerima',
+            child: _isLoadingUserData
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                : Column(
+                    children: [
+                      TextField(
+                        controller: _recipientNameController,
+                        decoration: InputDecoration(
+                          labelText: 'Nama Penerima',
+                          hintText: 'Masukkan nama penerima',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _recipientPhoneController,
+                        keyboardType: TextInputType.phone,
+                        decoration: InputDecoration(
+                          labelText: 'No. Telepon Penerima',
+                          hintText: 'Contoh: 081234567890',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Data ini akan diterima oleh kurir untuk proses pengiriman',
+                        style: TextStyle(fontSize: 11, color: Colors.black54),
+                      ),
+                    ],
+                  ),
+          ),
+          const SizedBox(height: 14),
+
           // Alamat Pengiriman
           _CardSection(
             title: 'Alamat Pengiriman',
+            trailing: 'Pilih alamat tersimpan',
             child: uid == null
                 ? const Text('Silakan login')
                 : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -220,6 +313,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
             width: double.infinity,
             child: ElevatedButton(
               onPressed: () async {
+                // Validasi data penerima
+                final recipientName = _recipientNameController.text.trim();
+                final recipientPhone = _recipientPhoneController.text.trim();
+                
+                if (recipientName.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Nama penerima harus diisi')),
+                  );
+                  return;
+                }
+                if (recipientPhone.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No. telepon penerima harus diisi')),
+                  );
+                  return;
+                }
+                
                 if (_selectedAddrId == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Pilih alamat terlebih dahulu')),
@@ -246,13 +356,141 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   );
                   return;
                 }
+                
+                // Gabungkan data penerima dengan alamat lengkap untuk geocoding
+                final addressDetail = snap.data()!['detail'] as String;
                 final addr = {
+                  'name': recipientName,
+                  'phone': recipientPhone,
+                  'address': addressDetail,
+                  // Data lama untuk backward compatibility
                   'id': snap.id,
                   'title': snap.data()!['title'],
-                  'detail': snap.data()!['detail'],
+                  'detail': addressDetail,
                 };
-                await widget.onCheckout(total.toDouble(), addr, _payment!);
-                if (mounted) Navigator.pop(context);
+                
+                // Tampilkan loading
+                if (!mounted) return;
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (ctx) => const Center(
+                    child: CircularProgressIndicator(color: Color(0xFFFF7A00)),
+                  ),
+                );
+                
+                try {
+                  // Proses checkout
+                  await widget.onCheckout(total.toDouble(), addr, _payment!);
+                  
+                  // Tutup loading
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                  
+                  // Tampilkan dialog sukses
+                  await showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (ctx) => AlertDialog(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      title: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.check_circle, color: Colors.green.shade600, size: 28),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text('Pesanan Berhasil', style: TextStyle(fontSize: 18)),
+                          ),
+                        ],
+                      ),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Pesanan Anda telah dibuat!', 
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 8),
+                          Text('Penerima: $recipientName',
+                            style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                          Text('Telepon: $recipientPhone',
+                            style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('Total Pembayaran:', style: TextStyle(fontSize: 12)),
+                                    Text('Rp ${_rp(total)}', 
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFFFF7A00),
+                                        fontSize: 16,
+                                      )),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    const Text('Metode: ', style: TextStyle(fontSize: 12)),
+                                    Text(_payment!.toUpperCase(), 
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Silakan lakukan pembayaran sesuai metode yang dipilih. '
+                            'Pesanan akan diproses setelah pembayaran dikonfirmasi oleh admin.',
+                            style: TextStyle(fontSize: 12, color: Colors.black54),
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF7A00),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: const Text('OK'),
+                        ),
+                      ],
+                    ),
+                  );
+                  
+                  // Kembali ke halaman utama dan pindah ke tab Riwayat
+                  if (!mounted) return;
+                  Navigator.pop(context, true); // return true untuk switch ke tab Riwayat
+                } catch (e) {
+                  // Tutup loading jika ada
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                  
+                  // Tampilkan error
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Gagal membuat pesanan: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF7A00),

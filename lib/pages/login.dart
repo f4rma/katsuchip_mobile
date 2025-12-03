@@ -186,15 +186,15 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 8),
                 Text(_error!, style: const TextStyle(color: Colors.red)),
               ],
-              const SizedBox(height: 18),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8.0),
-                child: Text(
-                  'Dengan masuk di sini, kamu menyetujui Syarat & Ketentuan serta Kebijakan Privasi Katsuchip',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 11, color: Colors.black54),
-                ),
-              ),
+              // const SizedBox(height: 18),
+              // const Padding(
+              //   padding: EdgeInsets.symmetric(horizontal: 8.0),
+                // child: Text(
+                //   'Dengan masuk di sini, kamu menyetujui Syarat & Ketentuan serta Kebijakan Privasi Katsuchip',
+                //   textAlign: TextAlign.center,
+                //   style: TextStyle(fontSize: 11, color: Colors.black54),
+                // ),
+              // ),
 
               const SizedBox(height: 12),
               // Link "Belum punya akun? Daftar sekarang!"
@@ -224,6 +224,52 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
 
+              const SizedBox(height: 24),
+              
+              // Fallback button untuk registrasi kurir dengan token
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.local_shipping, color: Colors.orange.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Ingin jadi bagian Katsuchip?',
+                          style: TextStyle(
+                            color: Colors.orange.shade900,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFFFF7A00),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
+                      icon: const Icon(Icons.vpn_key, size: 18),
+                      label: const Text(
+                        'Masukkan Token Invitation',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(context).pushNamed('/register-kurir'),
+                    ),
+                  ],
+                ),
+              ),
 
             ],
           ),

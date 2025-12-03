@@ -4,6 +4,7 @@ import '../../service/auth_service.dart';
 import '../../service/courier_service.dart';
 import '../../models/courier_models.dart';
 import 'kurir_detail_order.dart';
+import 'kurir_batch_pickup_page.dart';
 
 class KurirDashboard extends StatefulWidget {
   const KurirDashboard({super.key});
@@ -287,8 +288,8 @@ class _KurirDashboardState extends State<KurirDashboard> {
             // Orders list
             StreamBuilder<List<CourierOrder>>(
               stream: _filterStatus == 'semua'
-                  ? _layananKurir.getAvailableOrdersStream()
-                  : _layananKurir.getOrdersByDeliveryStatusStream(_filterStatus),
+                  ? _layananKurir.getAllOrdersStream(uid)
+                  : _layananKurir.getOrdersByDeliveryStatusStream(_filterStatus, uid),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -336,6 +337,94 @@ class _KurirDashboardState extends State<KurirDashboard> {
           ],
         ),
       ),
+      floatingActionButton: _BatchRouteFAB(uid: uid),
+    );
+  }
+}
+
+/// Separate widget for FAB to prevent rebuild when filter changes
+class _BatchRouteFAB extends StatefulWidget {
+  final String uid;
+  
+  const _BatchRouteFAB({required this.uid});
+  
+  @override
+  State<_BatchRouteFAB> createState() => _BatchRouteFABState();
+}
+
+class _BatchRouteFABState extends State<_BatchRouteFAB> {
+  int _lastCount = 0;
+  List<CourierOrder> _cachedOrders = [];
+  
+  @override
+  Widget build(BuildContext context) {
+    const orange = Color(0xFFFF7A00);
+    
+    if (widget.uid.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return StreamBuilder<List<CourierOrder>>(
+      stream: CourierService().getCourierActiveOrdersStream(widget.uid),
+      builder: (context, snapshot) {
+        // Tunggu data ready
+        if (!snapshot.hasData) {
+          // Tampilkan cached FAB jika ada
+          if (_lastCount >= 2) {
+            return FloatingActionButton.extended(
+              heroTag: 'batch_route_fab',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => KurirBatchPickupPage(
+                      activeOrders: _cachedOrders,
+                    ),
+                  ),
+                );
+              },
+              backgroundColor: orange,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.route),
+              label: Text('Lihat Rute ($_lastCount)'),
+            );
+          }
+          return const SizedBox.shrink();
+        }
+        
+        final activeOrders = snapshot.data ?? [];
+        
+        // Tampilkan FAB jika ada 2+ pesanan on_delivery ATAU waiting_pickup
+        final onDeliveryOrders = activeOrders
+            .where((o) => o.deliveryStatus == 'on_delivery' || o.deliveryStatus == 'waiting_pickup')
+            .toList();
+        
+        // Update cache hanya jika count berubah
+        if (onDeliveryOrders.length != _lastCount) {
+          _lastCount = onDeliveryOrders.length;
+          _cachedOrders = onDeliveryOrders;
+        }
+        
+        if (onDeliveryOrders.length < 2) {
+          return const SizedBox.shrink();
+        }
+        
+        return FloatingActionButton.extended(
+          heroTag: 'batch_route_fab',
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => KurirBatchPickupPage(
+                  activeOrders: onDeliveryOrders,
+                ),
+              ),
+            );
+          },
+          backgroundColor: orange,
+          foregroundColor: Colors.white,
+          icon: const Icon(Icons.route),
+          label: Text('Lihat Rute (${onDeliveryOrders.length})'),
+        );
+      },
     );
   }
 }

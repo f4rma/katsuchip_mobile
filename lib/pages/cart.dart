@@ -18,6 +18,9 @@ class CartPage extends StatefulWidget {
 
   // Tambahan: callback untuk pindah ke tab Menu
   final VoidCallback onGoToMenu;
+  
+  // Tambahan: callback untuk pindah ke tab Riwayat setelah checkout
+  final VoidCallback? onGoToOrders;
 
   const CartPage({
     super.key,
@@ -27,6 +30,7 @@ class CartPage extends StatefulWidget {
     required this.onRemove,
     required this.onCheckout,
     required this.onGoToMenu, // new
+    this.onGoToOrders,
   });
 
   @override
@@ -90,13 +94,18 @@ class _CartPageState extends State<CartPage> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).push(MaterialPageRoute(
+                    onPressed: () async {
+                      final result = await Navigator.of(context).push<bool>(MaterialPageRoute(
                         builder: (_) => CheckoutPage(
                           items: widget.items,
                           onCheckout: widget.onCheckout, // forward
                         ),
                       ));
+                      
+                      // Jika checkout berhasil, pindah ke tab Riwayat
+                      if (result == true && widget.onGoToOrders != null) {
+                        widget.onGoToOrders!();
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFFF7A00),

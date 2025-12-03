@@ -91,7 +91,18 @@ class DetailPage extends StatelessWidget {
                       ),
                       onPressed: () {
                         onAdd?.call(item);
-                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${item.name} ditambahkan ke keranjang'),
+                            duration: const Duration(milliseconds: 1500),
+                            backgroundColor: Colors.green,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                        // Delay navigation sedikit agar user melihat feedback
+                        Future.delayed(const Duration(milliseconds: 400), () {
+                          if (context.mounted) Navigator.pop(context);
+                        });
                       },
                       child: const Text('Tambah'),
                     ),

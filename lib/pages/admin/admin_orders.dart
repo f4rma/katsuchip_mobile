@@ -160,6 +160,8 @@ class _OrderTile extends StatelessWidget {
     final uid = data['userId'] as String? ?? '-';
     final total = (data['total'] ?? 0) as num;
     final status = data['status'] as String? ?? 'pending';
+    final kurirId = data['kurirId'] as String?;
+    final kurirName = data['kurirName'] as String?;
     final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
     final when = createdAt != null ? '${createdAt.day}/${createdAt.month} ${createdAt.hour}:${createdAt.minute.toString().padLeft(2, '0')}' : '-';
 
@@ -182,15 +184,72 @@ class _OrderTile extends StatelessWidget {
       switch (status) {
         case 'pending':
           return [
-            btn('Konfirmasi', () => _update(doc, 'confirmed', context)),
-            btn('Batalkan', () => _update(doc, 'cancelled', context), color: Colors.grey),
+            btn('Konfirmasi', () => _updateStatus(doc, 'confirmed', context)),
+            btn('Batalkan', () => _updateStatus(doc, 'cancelled', context), color: Colors.grey),
           ];
         case 'confirmed':
-          return [btn('Proses', () => _update(doc, 'processing', context))];
+          return [btn('Proses', () => _updateStatus(doc, 'processing', context))];
         case 'processing':
-          return [btn('Antarkan', () => _update(doc, 'delivering', context))];
+          return [btn('Antarkan', () => _updateToDelivering(doc, context))];
         case 'delivering':
-          return [btn('Selesai', () => _update(doc, 'completed', context))];
+          // Setelah antarkan, tidak ada tombol lagi - menunggu kurir
+          if (kurirId != null && kurirName != null) {
+            return [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.delivery_dining, size: 16, color: Colors.blue.shade700),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Diantar oleh: $kurirName',
+                      style: TextStyle(fontSize: 12, color: Colors.blue.shade700, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ];
+          }
+          return [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Menunggu kurir mengambil...',
+                style: TextStyle(fontSize: 12, color: Colors.orange, fontStyle: FontStyle.italic),
+              ),
+            ),
+          ];
+        case 'delivered':
+          return [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, size: 16, color: Colors.green.shade700),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Pesanan Selesai',
+                    style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ];
         default:
           return [Container()];
       }
@@ -215,7 +274,7 @@ class _OrderTile extends StatelessWidget {
     );
   }
 
-  Future<void> _update(QueryDocumentSnapshot<Map<String, dynamic>> doc, String next, BuildContext context) async {
+  Future<void> _updateStatus(QueryDocumentSnapshot<Map<String, dynamic>> doc, String next, BuildContext context) async {
     await doc.reference.update({'status': next, 'updatedAt': FieldValue.serverTimestamp()});
     final uid = (doc.data()['userId'] as String?) ?? '';
     if (uid.isNotEmpty) {
@@ -228,6 +287,32 @@ class _OrderTile extends StatelessWidget {
     }
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status diubah ke $next')));
+    }
+  }
+
+  Future<void> _updateToDelivering(QueryDocumentSnapshot<Map<String, dynamic>> doc, BuildContext ctx) async {
+    // Update status ke 'delivering' DAN set deliveryStatus ke 'waiting_pickup'
+    // Ini akan membuat pesanan muncul di dashboard kurir aktif
+    await doc.reference.update({
+      'status': 'delivering',
+      'deliveryStatus': 'waiting_pickup',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    
+    final uid = (doc.data()['userId'] as String?) ?? '';
+    if (uid.isNotEmpty) {
+      await FirebaseFirestore.instance.collection('users').doc(uid).collection('notifications').add({
+        'type': 'order_status',
+        'orderId': doc.id,
+        'status': 'delivering',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    
+    if (ctx.mounted) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(content: Text('Pesanan siap untuk diantar! Kurir dapat melihat pesanan ini.')),
+      );
     }
   }
 }

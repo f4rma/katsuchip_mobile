@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:flutter/material.dart';
+import 'package:app_links/app_links.dart';
 import 'package:flutter/services.dart'; // <-- tambah ini
 import 'package:katsuchip_app/pages/menu.dart';
 import 'package:katsuchip_app/pages/cart.dart';
@@ -26,20 +27,88 @@ Future<void> main() async {
   runApp(const AppRoot());
 }
 
-class AppRoot extends StatelessWidget {
+class AppRoot extends StatefulWidget {
   const AppRoot({super.key});
+
+  @override
+  State<AppRoot> createState() => _AppRootState();
+}
+
+class _AppRootState extends State<AppRoot> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  late AppLinks _appLinks;
+  StreamSubscription? _linkSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _initDeepLinks();
+  }
+
+  @override
+  void dispose() {
+    _linkSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initDeepLinks() async {
+    _appLinks = AppLinks();
+
+    // Handle initial link when app is opened from terminated state
+    try {
+      final initialUri = await _appLinks.getInitialLink();
+      if (initialUri != null) {
+        _handleDeepLink(initialUri);
+      }
+    } catch (e) {
+      print('Error getting initial URI: $e');
+    }
+
+    // Handle links while app is running
+    _linkSubscription = _appLinks.uriLinkStream.listen((Uri uri) {
+      _handleDeepLink(uri);
+    }, onError: (err) {
+      print('Error listening to URI: $err');
+    });
+  }
+
+  void _handleDeepLink(Uri uri) {
+    print('Received deep link: $uri');
+    
+    // Handle katsuchip://register-kurir?token=xxx
+    if (uri.scheme == 'katsuchip' && uri.host == 'register-kurir') {
+      final token = uri.queryParameters['token'];
+      if (token != null && token.isNotEmpty) {
+        // Navigate to register kurir page with token
+        _navigatorKey.currentState?.pushNamed(
+          '/register-kurir',
+          arguments: {'token': token},
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       theme: ThemeData(scaffoldBackgroundColor: const Color(0xFFFFF7ED)),
       debugShowCheckedModeBanner: false,
       initialRoute: '/',
       onGenerateRoute: (settings) {
-        // Handle /register-kurir?token=xxx
-        if (settings.name != null && settings.name!.startsWith('/register-kurir')) {
-          final uri = Uri.parse(settings.name!);
-          final token = uri.queryParameters['token'];
+        // Handle /register-kurir dengan token dari arguments
+        if (settings.name == '/register-kurir') {
+          String? token;
+          
+          // Cek dari arguments (dari deep link handler)
+          if (settings.arguments != null) {
+            if (settings.arguments is String) {
+              token = settings.arguments as String;
+            } else if (settings.arguments is Map) {
+              token = (settings.arguments as Map)['token'] as String?;
+            }
+          }
+          
           return MaterialPageRoute(
             builder: (context) => RegisterKurirPage(invitationToken: token),
           );
@@ -81,12 +150,39 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    final uid = AuthService().currentUser?.uid;
+    
+    // Tambah logging untuk debug
+    final user = AuthService().currentUser;
+    print('🔐 User auth state:');
+    print('   UID: ${user?.uid}');
+    print('   Email: ${user?.email}');
+    print('   Is authenticated: ${user != null}');
+    
+    final uid = user?.uid;
     if (uid != null) {
-      _cartSub = _repo.cartStream(uid).listen((items) {
+      print('📡 Starting cart stream for UID: $uid');
+      
+      // Tambah delay kecil untuk memastikan auth sudah ready
+      Future.delayed(const Duration(milliseconds: 500), () {
         if (!mounted) return;
-        setState(() => _cart = items);
+        
+        _cartSub = _repo.cartStream(uid).listen(
+          (items) {
+            print('✅ Cart stream data received: ${items.length} items');
+            for (final item in items) {
+              print('   - ${item.item.name} x${item.qty}');
+            }
+            if (!mounted) return;
+            setState(() => _cart = items);
+          },
+          onError: (error) {
+            print('❌ Cart stream error: $error');
+            print('   Error type: ${error.runtimeType}');
+          },
+        );
       });
+    } else {
+      print('⚠️ No user authenticated, cart stream not started');
     }
   }
 
@@ -96,35 +192,116 @@ class _MyAppState extends State<MyApp> {
     super.dispose();
   }
 
-  void _addToCart(MenuItemData item) {
+  void _addToCart(MenuItemData item) async {
     final uid = AuthService().currentUser?.uid;
-    if (uid == null) return;
-    _repo.increment(uid, item, 1);
+    if (uid == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Silakan login terlebih dahulu')),
+        );
+      }
+      return;
+    }
+    
+    print('🛒 Adding to cart:');
+    print('   User ID: $uid');
+    print('   Item: ${item.name} (${item.id})');
+    
+    try {
+      await _repo.increment(uid, item, 1);
+      print('✅ Cart updated successfully');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${item.name} ditambahkan ke keranjang'),
+            duration: const Duration(seconds: 1),
+            backgroundColor: const Color(0xFFFF7A00),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Error adding to cart: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal menambahkan ke keranjang: ${e.toString().contains('permission') ? 'Akses ditolak' : 'Error'}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 
-  void _inc(CartItem e) {
+  void _inc(CartItem e) async {
     final uid = AuthService().currentUser?.uid;
     if (uid == null) return;
-    _repo.increment(uid, e.item, 1);
+    try {
+      await _repo.increment(uid, e.item, 1);
+    } catch (err) {
+      print('Error incrementing cart: $err');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menambah jumlah: $err')),
+        );
+      }
+    }
   }
 
-  void _dec(CartItem e) {
+  void _dec(CartItem e) async {
     final uid = AuthService().currentUser?.uid;
     if (uid == null) return;
-    _repo.increment(uid, e.item, -1);
+    try {
+      await _repo.increment(uid, e.item, -1);
+    } catch (err) {
+      print('Error decrementing cart: $err');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal mengurangi jumlah: $err')),
+        );
+      }
+    }
   }
 
-  void _remove(CartItem e) {
+  void _goToMenu() {
+    if (mounted) {
+      setState(() => _selectedIndex = 0);
+    }
+  }
+
+  void _goToOrders() {
+    if (mounted) {
+      setState(() => _selectedIndex = 2);
+    }
+  }
+
+  void _remove(CartItem e) async {
     final uid = AuthService().currentUser?.uid;
     if (uid == null) return;
-    _repo.setItemQty(uid, e.item, 0);
+    try {
+      await _repo.setItemQty(uid, e.item, 0);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${e.item.name} dihapus dari keranjang'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (err) {
+      print('Error removing from cart: $err');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menghapus item: $err')),
+        );
+      }
+    }
   }
-
-  
 
   @override
   Widget build(BuildContext context) {
-
     final pages = [
       MenuPage(onAdd: _addToCart),
       CartPage(
@@ -137,7 +314,7 @@ class _MyAppState extends State<MyApp> {
           if (uid == null) return;
           
           // Place order dan dapatkan order ID & code
-          final orderInfo = await _repo.placeOrder(
+          await _repo.placeOrder(
             uid,
             _cart,
             total,
@@ -145,47 +322,12 @@ class _MyAppState extends State<MyApp> {
             paymentMethod: payment,
           );
           
-          if (mounted) {
-            // Pembayaran Midtrans dinonaktifkan sementara
-            // Tampilkan dialog konfirmasi pesanan
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Pesanan Berhasil Dibuat'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Kode Pesanan: ${orderInfo['orderCode']}'),
-                    const SizedBox(height: 8),
-                    Text('Total: Rp ${total.toInt().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}'),
-                    const SizedBox(height: 8),
-                    Text('Metode Pembayaran: $payment'),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Pesanan Anda akan diproses setelah pembayaran dikonfirmasi oleh admin.',
-                      style: TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context); // Close dialog
-                      setState(() {
-                        _cart.clear();
-                        _selectedIndex = 1; // Pindah ke tab Orders
-                      });
-                    },
-                    child: const Text('OK'),
-                  ),
-                ],
-              ),
-            );
-          }
+          // Dialog dan navigasi sekarang ditangani di CheckoutPage
         },
         // Tambahan: callback ganti tab ke Menu
-        onGoToMenu: () => setState(() => _selectedIndex = 0),
+        onGoToMenu: _goToMenu,
+        // Tambahan: callback ganti tab ke Riwayat setelah checkout
+        onGoToOrders: _goToOrders,
       ),
       OrdersPage(uid: AuthService().currentUser!.uid),
       const ProfilePage(),

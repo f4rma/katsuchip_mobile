@@ -87,15 +87,26 @@ class CourierOrder {
     final deliveryStartedAtRaw = data['deliveryStartedAt'];
     final deliveredAtRaw = data['deliveredAt'];
 
+    // Handle multiple format shippingAddress:
+    // Format 1 (terbaru): {name, phone, address} - lengkap dengan data penerima
+    // Format 2 (lama): {id, detail, title} - hanya alamat tanpa data penerima
+    String recipientName = shippingAddress['name'] as String? ?? 'Penerima';
+    String recipientPhone = shippingAddress['phone'] as String? ?? '-';
+    String address = shippingAddress['address'] as String? ?? 
+                     shippingAddress['detail'] as String? ?? 
+                     data['address'] as String? ?? '-';
+    
     return CourierOrder(
       orderId: id,
       code: data['code'] as String? ?? id.substring(0, 6).toUpperCase(),
       userId: data['userId'] as String? ?? '',
-      recipientName: shippingAddress['name'] as String? ?? '-',
-      recipientPhone: shippingAddress['phone'] as String? ?? '-',
-      address: shippingAddress['address'] as String? ?? '-',
-      latitude: (shippingAddress['latitude'] as num?)?.toDouble(),
-      longitude: (shippingAddress['longitude'] as num?)?.toDouble(),
+      recipientName: recipientName,
+      recipientPhone: recipientPhone,
+      address: address,
+      latitude: (shippingAddress['latitude'] as num?)?.toDouble() ?? 
+                (data['latitude'] as num?)?.toDouble(),
+      longitude: (shippingAddress['longitude'] as num?)?.toDouble() ?? 
+                 (data['longitude'] as num?)?.toDouble(),
       total: data['total'] as num? ?? 0,
       status: data['status'] as String? ?? 'pending',
       deliveryStatus: data['deliveryStatus'] as String? ?? 'waiting_pickup',

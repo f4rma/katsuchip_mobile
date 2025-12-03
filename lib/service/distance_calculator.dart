@@ -92,6 +92,9 @@ class DistanceCalculator {
   /// Hitung total jarak untuk route dengan multiple waypoints
   /// 
   /// Parameters:
+  /// Hitung total jarak untuk route dengan multiple waypoints
+  /// 
+  /// Parameters:
   /// - coordinates: List of [latitude, longitude] pairs
   /// 
   /// Returns: total jarak dalam kilometer
@@ -120,6 +123,9 @@ class DistanceCalculator {
       );
     }
     
-    return totalDistance;
+    // Haversine memberikan jarak garis lurus (as the crow flies)
+    // Untuk estimasi jarak jalan sebenarnya, gunakan faktor koreksi 1.3
+    // (jalan tidak lurus, ada belokan, dll)
+    return totalDistance * 1.3;
   }
 }

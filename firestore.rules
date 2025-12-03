@@ -22,10 +22,16 @@ service cloud.firestore {
       // Admin bisa read semua user, User bisa read data sendiri
       allow read: if isAdmin() || isOwner(userId);
       
-      // Admin bisa create user baru (untuk registrasi kurir), atau customer self-register
+      // Allow create user:
+      // 1. Admin bisa create user baru
+      // 2. Customer self-register
+      // 3. Kurir registrasi dengan token valid (role = 'kurir')
       allow create: if isAdmin() || 
                        (request.auth != null && 
                         request.resource.data.role == 'customer' &&
+                        request.auth.uid == userId) ||
+                       (request.auth != null &&
+                        request.resource.data.role == 'kurir' &&
                         request.auth.uid == userId);
       
       // Admin bisa update isActive dan field lainnya
@@ -37,6 +43,21 @@ service cloud.firestore {
       
       // Subcollection: notifications
       match /notifications/{notifId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      
+      // Subcollection: cart
+      match /cart/{itemId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      
+      // Subcollection: orders
+      match /orders/{orderId} {
+        allow read, write: if isOwner(userId) || isAdmin() || isKurir();
+      }
+      
+      // Subcollection: addresses (untuk shipping address)
+      match /addresses/{addressId} {
         allow read, write: if isOwner(userId) || isAdmin();
       }
       
@@ -70,14 +91,18 @@ service cloud.firestore {
       // Admin bisa query semua orders dari collectionGroup
       allow read: if isAdmin();
       
-      // Kurir bisa read orders
+      // Kurir bisa read SEMUA orders (seperti sebelumnya)
       allow read: if isKurir();
       
       // User bisa baca order sendiri
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
       
-      // Allow write untuk admin dan kurir
+      // Allow write untuk admin dan kurir (untuk update delivery status)
+      // PENTING: Kurir perlu update orders di users/{userId}/orders/{orderId}
       allow write: if isAdmin() || isKurir();
+      
+      // Fallback: Owner bisa update order sendiri (untuk cancel dll)
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
     }
     
     // Menu collection (nama collection: 'menus')
@@ -115,6 +140,18 @@ service cloud.firestore {
       // Allow delete untuk kurir yang sudah registrasi (cleanup)
       allow delete: if request.auth != null && 
                        request.auth.token.email == resource.data.email;
+    }
+    
+    // Notification logs collection
+    match /notification_logs/{logId} {
+      // Admin bisa CRUD semua logs
+      allow read, write: if isAdmin();
+      
+      // Kurir bisa create logs (untuk tracking delivery updates)
+      allow create: if isKurir();
+      
+      // System/authenticated users bisa create logs
+      allow create: if request.auth != null;
     }
   }
 }

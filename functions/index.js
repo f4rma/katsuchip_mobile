@@ -195,3 +195,262 @@ Jika Anda tidak merasa mendaftar sebagai kurir, abaikan email ini.
     );
   }
 });
+
+/**
+ * Scheduled Cloud Function untuk auto-cleanup orders completed > 60 hari
+ * Jalan otomatis setiap hari jam 2 pagi (Asia/Jakarta)
+ * 
+ * Cron syntax: 'minute hour day month weekday'
+ * '0 2 * * *' = Setiap hari jam 2:00 AM
+ * Timezone: Asia/Jakarta (WIB)
+ */
+exports.cleanupOldOrders = functions
+  .region('asia-southeast2') // Server di Jakarta untuk latency rendah
+  .pubsub
+  .schedule('0 2 * * *') // Jalan setiap hari jam 2 pagi
+  .timeZone('Asia/Jakarta')
+  .onRun(async (context) => {
+    console.log('🧹 Starting cleanup of old completed orders...');
+    
+    try {
+      const db = admin.firestore();
+      
+      // Hitung 60 hari yang lalu
+      const sixtyDaysAgo = new Date();
+      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+      
+      console.log(`🔍 Looking for orders completed before: ${sixtyDaysAgo.toISOString()}`);
+      
+      // Query orders dengan status 'completed' dan completedAt < 60 hari lalu
+      const ordersToDelete = await db.collection('orders')
+        .where('deliveryStatus', '==', 'completed')
+        .where('completedAt', '<', admin.firestore.Timestamp.fromDate(sixtyDaysAgo))
+        .get();
+      
+      if (ordersToDelete.empty) {
+        console.log('✅ No old orders to clean up.');
+        return null;
+      }
+      
+      console.log(`🗑️ Found ${ordersToDelete.size} orders to delete`);
+      
+      // Batch delete (max 500 per batch)
+      const batchSize = 500;
+      const batches = [];
+      let currentBatch = db.batch();
+      let operationCount = 0;
+      
+      ordersToDelete.docs.forEach((doc) => {
+        currentBatch.delete(doc.ref);
+        operationCount++;
+        
+        // Jika sudah 500 operasi, commit batch dan buat batch baru
+        if (operationCount === batchSize) {
+          batches.push(currentBatch.commit());
+          currentBatch = db.batch();
+          operationCount = 0;
+        }
+      });
+      
+      // Commit sisa operasi
+      if (operationCount > 0) {
+        batches.push(currentBatch.commit());
+      }
+      
+      // Execute all batches
+      await Promise.all(batches);
+      
+      console.log(`✅ Successfully deleted ${ordersToDelete.size} old completed orders`);
+      
+      return {
+        success: true,
+        deletedCount: ordersToDelete.size,
+        cutoffDate: sixtyDaysAgo.toISOString()
+      };
+      
+    } catch (error) {
+      console.error('❌ Error during cleanup:', error);
+      throw error;
+    }
+  });
+
+/**
+ * Manual trigger function untuk cleanup (opsional)
+ * Bisa dipanggil manual dari admin panel jika perlu cleanup sekarang
+ */
+exports.triggerCleanupNow = functions.https.onCall(async (data, context) => {
+  // Validasi: hanya admin yang bisa trigger manual cleanup
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'User must be authenticated.'
+    );
+  }
+
+  const userDoc = await admin.firestore()
+    .collection('users')
+    .doc(context.auth.uid)
+    .get();
+  
+  if (!userDoc.exists || userDoc.data().role !== 'admin') {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Only admins can trigger manual cleanup.'
+    );
+  }
+
+  console.log('🧹 Manual cleanup triggered by admin:', context.auth.uid);
+  
+  try {
+    const db = admin.firestore();
+    
+    // Hitung 60 hari yang lalu (atau custom days dari parameter)
+    const daysAgo = data.days || 60;
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysAgo);
+    
+    const ordersToDelete = await db.collection('orders')
+      .where('deliveryStatus', '==', 'completed')
+      .where('completedAt', '<', admin.firestore.Timestamp.fromDate(cutoffDate))
+      .get();
+    
+    if (ordersToDelete.empty) {
+      return {
+        success: true,
+        message: 'No orders to clean up',
+        deletedCount: 0
+      };
+    }
+    
+    // Batch delete
+    const batchSize = 500;
+    const batches = [];
+    let currentBatch = db.batch();
+    let operationCount = 0;
+    
+    ordersToDelete.docs.forEach((doc) => {
+      currentBatch.delete(doc.ref);
+      operationCount++;
+      
+      if (operationCount === batchSize) {
+        batches.push(currentBatch.commit());
+        currentBatch = db.batch();
+        operationCount = 0;
+      }
+    });
+    
+    if (operationCount > 0) {
+      batches.push(currentBatch.commit());
+    }
+    
+    await Promise.all(batches);
+    
+    console.log(`✅ Manual cleanup completed: ${ordersToDelete.size} orders deleted`);
+    
+    return {
+      success: true,
+      message: `Successfully deleted ${ordersToDelete.size} orders older than ${daysAgo} days`,
+      deletedCount: ordersToDelete.size,
+      cutoffDate: cutoffDate.toISOString()
+    };
+    
+  } catch (error) {
+    console.error('❌ Error during manual cleanup:', error);
+    throw new functions.https.HttpsError(
+      'internal',
+      'Failed to cleanup orders: ' + error.message
+    );
+  }
+});
+
+/**
+ * Admin function untuk delete ALL orders (untuk reset database)
+ * HATI-HATI: Ini akan menghapus SEMUA orders tanpa filter!
+ */
+exports.deleteAllOrders = functions.https.onCall(async (data, context) => {
+  // Validasi: hanya admin yang bisa trigger
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'User must be authenticated.'
+    );
+  }
+
+  const userDoc = await admin.firestore()
+    .collection('users')
+    .doc(context.auth.uid)
+    .get();
+  
+  if (!userDoc.exists || userDoc.data().role !== 'admin') {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Only admins can delete all orders.'
+    );
+  }
+
+  // Extra confirmation: require confirmation token
+  const confirmToken = data.confirmToken;
+  if (confirmToken !== 'DELETE_ALL_ORDERS_CONFIRM') {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Invalid confirmation token. Please confirm with correct token.'
+    );
+  }
+
+  console.log('🗑️ DELETE ALL ORDERS triggered by admin:', context.auth.uid);
+  
+  try {
+    const db = admin.firestore();
+    
+    // Get ALL orders (no filter)
+    const ordersSnapshot = await db.collection('orders').get();
+    
+    if (ordersSnapshot.empty) {
+      return {
+        success: true,
+        message: 'No orders to delete',
+        deletedCount: 0
+      };
+    }
+    
+    console.log(`⚠️ Deleting ${ordersSnapshot.size} orders...`);
+    
+    // Batch delete
+    const batchSize = 500;
+    const batches = [];
+    let currentBatch = db.batch();
+    let operationCount = 0;
+    
+    ordersSnapshot.docs.forEach((doc) => {
+      currentBatch.delete(doc.ref);
+      operationCount++;
+      
+      if (operationCount === batchSize) {
+        batches.push(currentBatch.commit());
+        currentBatch = db.batch();
+        operationCount = 0;
+      }
+    });
+    
+    if (operationCount > 0) {
+      batches.push(currentBatch.commit());
+    }
+    
+    await Promise.all(batches);
+    
+    console.log(`✅ Successfully deleted ${ordersSnapshot.size} orders`);
+    
+    return {
+      success: true,
+      message: `Successfully deleted ALL ${ordersSnapshot.size} orders`,
+      deletedCount: ordersSnapshot.size
+    };
+    
+  } catch (error) {
+    console.error('❌ Error deleting all orders:', error);
+    throw new functions.https.HttpsError(
+      'internal',
+      'Failed to delete orders: ' + error.message
+    );
+  }
+});

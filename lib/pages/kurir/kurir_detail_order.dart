@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../service/auth_service.dart';
 import '../../service/courier_service.dart';
+import '../../service/geocoding_service.dart';
 import '../../models/courier_models.dart';
 
 class KurirDetailOrder extends StatefulWidget {
@@ -21,10 +22,14 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
   final CourierService _layananKurir = CourierService();
   bool _sedangMemuat = false;
   String _namaKurir = '';
+  late final Stream<CourierOrder?> _orderStream; // Cache stream
 
   @override
   void initState() {
     super.initState();
+    // Buat stream SEKALI saja di initState, bukan di build method
+    final uid = AuthService().currentUser?.uid ?? '';
+    _orderStream = _layananKurir.getOrderStream(widget.idPesanan, uid);
     _muatNamaKurir();
   }
 
@@ -77,6 +82,12 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
     try {
       final uid = AuthService().currentUser?.uid;
       if (uid == null) throw 'User tidak terautentikasi';
+      
+      print('🚀 UI: Memulai pengiriman');
+      print('  - Order ID: ${pesanan.orderId}');
+      print('  - Customer ID: ${pesanan.userId}');
+      print('  - Courier ID: $uid');
+      print('  - Order Code: ${pesanan.code}');
 
       await _layananKurir.startDelivery(
         orderId: pesanan.orderId,
@@ -85,6 +96,8 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
         customerId: pesanan.userId,
         orderCode: pesanan.code,
       );
+      
+      print('✅ UI: Pengiriman berhasil dimulai!');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -95,6 +108,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
         );
       }
     } catch (e) {
+      print('❌ UI Error _mulaiPengiriman: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -141,6 +155,12 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
     try {
       final uid = AuthService().currentUser?.uid;
       if (uid == null) throw 'User tidak terautentikasi';
+      
+      print('📦 UI: Menandai pesanan terkirim');
+      print('  - Order ID: ${pesanan.orderId}');
+      print('  - Customer ID: ${pesanan.userId}');
+      print('  - Courier ID: $uid');
+      print('  - Order Code: ${pesanan.code}');
 
       await _layananKurir.markAsDelivered(
         orderId: pesanan.orderId,
@@ -149,6 +169,8 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
         customerId: pesanan.userId,
         orderCode: pesanan.code,
       );
+      
+      print('✅ UI: Pesanan berhasil ditandai terkirim!');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -160,6 +182,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
         Navigator.of(context).pop();
       }
     } catch (e) {
+      print('❌ UI Error _selesaiPengiriman: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -176,28 +199,180 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
   }
 
   Future<void> _bukaGoogleMaps(CourierOrder pesanan) async {
+    // Helper untuk validasi koordinat
+    bool _isValid(double? lat, double? lng) {
+      if (lat == null || lng == null) return false;
+      if (lat == 0 && lng == 0) return false;
+      if (lat < -90 || lat > 90) return false;
+      if (lng < -180 || lng > 180) return false;
+      return true;
+    }
+
+    // Deteksi kemungkinan koordinat tertukar (lat > 90 dan lon dalam rentang lat)
+    Map<String, double> _maybeSwap(double lat, double lng) {
+      if (lat.abs() > 90 && lng.abs() <= 90) {
+        // Swap
+        return {'lat': lng, 'lng': lat};
+      }
+      return {'lat': lat, 'lng': lng};
+    }
+
     final lat = pesanan.latitude;
     final lng = pesanan.longitude;
 
-    if (lat == null || lng == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Koordinat lokasi tidak tersedia'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
+    // Cek apakah koordinat valid (bukan 0,0 dan dalam rentang)
+    if (!_isValid(lat, lng)) {
+      print('⚠ Koordinat tidak valid: lat=$lat, lng=$lng');
+      
+      // Coba geocode ulang dari alamat
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 16),
+                Text('Mencari lokasi...'),
+              ],
+            ),
+          ),
+        );
+      }
+      
+      try {
+        // Geocode ulang dari alamat
+        final coordinates = await GeocodingService.getCoordinates(pesanan.address);
+        
+        if (mounted) Navigator.pop(context); // Close loading
+        
+        if (coordinates != null) {
+          final newLat = coordinates['latitude']!;
+          final newLng = coordinates['longitude']!;
+          
+          print('✓ Geocoding ulang berhasil: $newLat, $newLng');
+          
+          // Buka Google Maps dengan koordinat baru
+          final url = Uri.parse(
+              'https://www.google.com/maps/dir/?api=1&destination=$newLat,$newLng&travelmode=driving');
+          
+          if (await canLaunchUrl(url)) {
+            await launchUrl(url, mode: LaunchMode.externalApplication);
+          } else {
+            throw 'Tidak dapat membuka Google Maps';
+          }
+          
+          // Optional: Update koordinat di Firestore untuk next time
+          try {
+            final orderRef = FirebaseFirestore.instance
+                .collection('orders')
+                .doc(pesanan.orderId);
+            
+            await orderRef.update({
+              'latitude': newLat,
+              'longitude': newLng,
+            });
+            
+            print('✓ Koordinat disimpan ke Firestore');
+          } catch (e) {
+            print('⚠ Gagal update koordinat di Firestore: $e');
+            // Tidak menghentikan proses, Maps tetap dibuka
+          }
+          
+          return;
+        } else {
+          print('✗ Geocoding ulang gagal - alamat tidak ditemukan');
+          
+          if (mounted) {
+            // Fallback: Buka Google Maps dengan alamat text
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Koordinat Tidak Tersedia'),
+                content: const Text(
+                  'Koordinat lokasi tidak ditemukan.\n\n'
+                  'Buka Google Maps dengan pencarian alamat?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Batal'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF7A00),
+                    ),
+                    child: const Text('Buka Maps'),
+                  ),
+                ],
+              ),
+            );
+            
+            if (confirmed == true) {
+              // Encode alamat untuk URL
+              final encodedAddress = Uri.encodeComponent(pesanan.address);
+              final url = Uri.parse(
+                  'https://www.google.com/maps/search/?api=1&query=$encodedAddress');
+              
+              if (await canLaunchUrl(url)) {
+                await launchUrl(url, mode: LaunchMode.externalApplication);
+              }
+            }
+          }
+          return;
+        }
+      } catch (e) {
+        print('❌ Error saat geocoding: $e');
+        
+        if (mounted) {
+          // Close loading dialog if still open
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+        
+        if (mounted) {
+          // Fallback langsung: buka dengan alamat text tanpa konfirmasi
+          print('→ Fallback: membuka Maps dengan pencarian alamat text');
+          
+          final encodedAddress = Uri.encodeComponent(pesanan.address);
+          final url = Uri.parse(
+              'https://www.google.com/maps/search/?api=1&query=$encodedAddress');
+          
+          if (await canLaunchUrl(url)) {
+            await launchUrl(url, mode: LaunchMode.externalApplication);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Tidak dapat membuka Google Maps'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+        return;
+      }
     }
 
-    // Google Maps navigation URL
-    final url = Uri.parse(
-        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving');
+    // Koordinat valid - kemungkinan perlu swap
+    final adjusted = _maybeSwap(lat!, lng!);
+    final finalLat = adjusted['lat']!;
+    final finalLng = adjusted['lng']!;
+    final directionsUrl = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=$finalLat,$finalLng&travelmode=driving');
+    final searchUrl = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$finalLat,$finalLng');
 
     try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (await canLaunchUrl(directionsUrl)) {
+        await launchUrl(directionsUrl, mode: LaunchMode.externalApplication);
       } else {
-        throw 'Tidak dapat membuka Google Maps';
+        print('⚠ Directions gagal, mencoba search URL');
+        if (await canLaunchUrl(searchUrl)) {
+          await launchUrl(searchUrl, mode: LaunchMode.externalApplication);
+        } else {
+          throw 'Tidak dapat membuka Google Maps';
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -244,16 +419,33 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
         title: const Text('Detail Pesanan'),
       ),
       body: StreamBuilder<CourierOrder?>(
-        stream: _layananKurir.getOrderStream(widget.idPesanan),
+        stream: _orderStream, // Gunakan cached stream, BUKAN panggil getOrderStream lagi
         builder: (context, snapshot) {
+          print('📱 StreamBuilder state: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, data: ${snapshot.data?.code}');
+          
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Error: ${snapshot.error}'),
+            );
+          }
+
           final pesanan = snapshot.data;
           if (pesanan == null) {
-            return const Center(
-              child: Text('Pesanan tidak ditemukan'),
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 64, color: Colors.orange),
+                  const SizedBox(height: 16),
+                  const Text('Pesanan tidak ditemukan'),
+                  const SizedBox(height: 8),
+                  Text('ID: ${widget.idPesanan}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
             );
           }
 

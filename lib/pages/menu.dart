@@ -139,7 +139,17 @@ class MenuPage extends StatelessWidget {
                   ),
                 ...items.map((item) => _MenuCard(
                       item: item,
-                      onAdd: () => onAdd(item),
+                      onAdd: () {
+                        onAdd(item);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${item.name} ditambahkan ke keranjang'),
+                            duration: const Duration(milliseconds: 1200),
+                            backgroundColor: Colors.green,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
                       onOpen: () {
                         Navigator.push(
                           context,

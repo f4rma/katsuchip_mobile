@@ -10,6 +10,7 @@ class OrderLocation {
   final String userId;
   final int total;
   final DateTime createdAt;
+  final String recipientName;
   
   OrderLocation({
     required this.orderId,
@@ -19,6 +20,7 @@ class OrderLocation {
     required this.userId,
     required this.total,
     required this.createdAt,
+    required this.recipientName,
   });
   
   factory OrderLocation.fromFirestore(DocumentSnapshot doc) {
@@ -31,6 +33,7 @@ class OrderLocation {
       userId: data['userId'] ?? '',
       total: (data['total'] ?? 0) as int,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
+      recipientName: data['recipientName'] ?? '',
     );
   }
 }
@@ -38,9 +41,13 @@ class OrderLocation {
 /// Service untuk optimasi rute pengiriman
 /// Menggunakan Nearest Neighbor Algorithm
 class RouteOptimizerService {
-  /// Lokasi toko KatsuChip (default: set koordinat toko Anda)
-  static const double _storeLat = -6.2088; // Ganti dengan koordinat toko sebenarnya
-  static const double _storeLon = 106.8456;
+  /// Lokasi toko KatsuChip (Padang, Sumatera Barat)
+  static const double _storeLat = -0.9059128990717297; // KatsuChip Padang
+  static const double _storeLon = 100.36016218288833;
+  
+  /// Expose store location untuk perhitungan dari luar
+  static double get storeLat => _storeLat;
+  static double get storeLon => _storeLon;
   
   /// Radius untuk grouping orders (dalam km)
   static const double _groupingRadius = 2.0;
