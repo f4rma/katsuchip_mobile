@@ -55,6 +55,7 @@ lib/firebase_options.dart
 
 # API keys configuration (keep .example file only)
 lib/config/api_keys.dart
+lib/config/maps_config.dart
 
 # Documentation files (keep README.md only)
 *_GUIDE.md
