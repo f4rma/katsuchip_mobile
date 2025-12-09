@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/maps_config.dart';
 
@@ -43,7 +43,7 @@ class GeocodingService {
         }
       }
 
-      // 2) Fallback ke Nominatim (OpenStreetMap) – GRATIS
+      // 2) Fallback ke Nominatim (OpenStreetMap) - GRATIS
       final uri = Uri.parse(_baseUrl).replace(queryParameters: {
         'q': address,
         'format': 'json',

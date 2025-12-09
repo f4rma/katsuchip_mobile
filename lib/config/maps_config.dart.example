@@ -1,15 +1,6 @@
 class MapsConfig {
-  // PENTING: Copy file ini ke maps_config.dart dan isi dengan API key Anda
-  // File maps_config.dart sudah ada di .gitignore (tidak akan masuk git)
-  
-  // Google Maps API Key (untuk Geocoding & Directions API)
-  // Dapatkan di: https://console.cloud.google.com/apis/credentials
-  // 
-  // Jika kosong (''), sistem akan fallback ke Nominatim (OpenStreetMap) - GRATIS tapi kurang akurat
-  static const String googleMapsApiKey = 'YOUR_GOOGLE_MAPS_API_KEY_HERE';
-  
-  // Cara setup:
-  // 1. Copy file ini: cp maps_config.dart.example maps_config.dart
-  // 2. Edit maps_config.dart, ganti YOUR_GOOGLE_MAPS_API_KEY_HERE dengan API key asli
-  // 3. Jangan commit maps_config.dart ke git!
+  // Google Maps API Key
+  // Get your key from: https://console.cloud.google.com/apis/credentials
+  // Biarkan kosong ('') untuk menonaktifkan dan gunakan fallback Nominatim (OSM).
+  static const String googleMapsApiKey = 'YOUR_GOOGLE_MAPS_API_KEY';
 }

@@ -1,12 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/error_handler.dart';
 
 class RegisterKurirPage extends StatefulWidget {
-  final String? invitationToken;
-  
-  const RegisterKurirPage({super.key, this.invitationToken});
+  const RegisterKurirPage({super.key});
 
   @override
   State<RegisterKurirPage> createState() => _RegisterKurirPageState();
@@ -14,106 +12,47 @@ class RegisterKurirPage extends StatefulWidget {
 
 class _RegisterKurirPageState extends State<RegisterKurirPage> {
   final _formKey = GlobalKey<FormState>();
-  final _tokenController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  bool _isLoading = false; // Changed: start with false untuk tampilkan form token
-  bool _tokenValidated = false; // New: flag untuk cek token sudah divalidasi
+  bool _isLoading = true;
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
   
-  // Invitation data
-  Map<String, dynamic>? _invitationData;
+  // User data (dibaca dari Firestore user document)
+  Map<String, dynamic>? _userData;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    // Jika token dari URL parameter, validasi otomatis
-    if (widget.invitationToken != null && widget.invitationToken!.isNotEmpty) {
-      _tokenController.text = widget.invitationToken!;
-      _validateInvitation();
-    }
+    _loadCurrentUserData();
   }
 
-  Future<void> _validateInvitation() async {
-    final token = _tokenController.text.trim();
-    
-    print('🔍 Validating token: $token');
-    
-    if (token.isEmpty) {
-      setState(() {
-        _errorMessage = 'Token invitation tidak boleh kosong.';
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
+  Future<void> _loadCurrentUserData() async {
     try {
-      // Ambil invitation dari Firestore berdasarkan token
-      print('📡 Fetching invitation from Firestore...');
-      final invitationDoc = await FirebaseFirestore.instance
-          .collection('kurir_invitations')
-          .doc(token)
-          .get();
-
-      print('📄 Document exists: ${invitationDoc.exists}');
-
-      if (!invitationDoc.exists) {
-        print('❌ Token not found in Firestore');
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
         setState(() {
-          _errorMessage = 'Token invitation tidak ditemukan atau sudah digunakan.';
+          _errorMessage = 'Anda belum login.';
           _isLoading = false;
         });
         return;
       }
-
-      final data = invitationDoc.data()!;
-      print('✅ Invitation data: ${data.keys.toList()}');
-      print('📊 Status: ${data['status']}');
-
-      // Cek apakah sudah digunakan
-      if (data['status'] != 'pending') {
-        print('❌ Token status is not pending: ${data['status']}');
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      if (!doc.exists) {
         setState(() {
-          _errorMessage = 'Token invitation sudah digunakan.';
+          _errorMessage = 'Profil pengguna tidak ditemukan.';
           _isLoading = false;
         });
         return;
       }
-
-      // Cek apakah expired (7 hari)
-      final tokenExpiry = (data['tokenExpiry'] as Timestamp).toDate();
-      final now = DateTime.now();
-      print('⏰ Token expiry: $tokenExpiry');
-      print('⏰ Current time: $now');
-      print('⏰ Is expired: ${now.isAfter(tokenExpiry)}');
-      
-      if (now.isAfter(tokenExpiry)) {
-        print('❌ Token expired');
-        setState(() {
-          _errorMessage = 'Token invitation sudah kadaluarsa. Hubungi admin untuk mendapatkan token baru.';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // Invitation valid
-      print('✅ Token validated successfully!');
       setState(() {
-        _invitationData = data;
-        _tokenValidated = true;
+        _userData = doc.data();
         _isLoading = false;
       });
-
     } catch (e) {
-      print('❌ Error validating token: $e');
       setState(() {
-        _errorMessage = 'Terjadi kesalahan saat validasi invitation: $e';
+        _errorMessage = 'Gagal memuat data pengguna: $e';
         _isLoading = false;
       });
     }
@@ -128,102 +67,38 @@ class _RegisterKurirPageState extends State<RegisterKurirPage> {
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_invitationData == null) return;
+    if (_userData == null) return;
 
     setState(() => _isLoading = true);
 
     try {
-      final email = _invitationData!['email'];
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw FirebaseAuthException(code: 'not-logged-in', message: 'Anda belum login.');
+      }
       final newPassword = _newPasswordController.text;
 
-      print('📝 Starting registration for: $email');
+      // 1. Update password akun kurir (ganti password pertama kali)
+      await currentUser.updatePassword(newPassword);
 
-      // Cek apakah email sudah terdaftar
-      final signInMethods = await FirebaseAuth.instance.fetchSignInMethodsForEmail(email);
-      
-      if (signInMethods.isNotEmpty) {
-        print('❌ Email already registered');
-        if (mounted) {
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Email ini sudah terdaftar di sistem.\n\n'
-                'Jika Anda lupa password, gunakan fitur "Lupa Password" di halaman login.\n\n'
-                'Jika Anda merasa ini kesalahan, hubungi admin.'
-              ),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 5),
-            ),
-          );
-        }
-        return;
-      }
-
-      print('✅ Email available, creating account...');
-
-      // 1. Buat akun Firebase Auth dengan password BARU
-      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: newPassword,
-      );
-
-      final uid = credential.user!.uid;
-      print('✅ Firebase Auth account created: $uid');
-
-      // 2. Buat user document di Firestore
-      print('📝 Creating user document in Firestore...');
-      try {
-        await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'email': email,
-          'name': _invitationData!['name'],
-          'role': 'kurir',
-          'phone': _invitationData!['phone'],
-          'isActive': true,
-          'createdAt': FieldValue.serverTimestamp(),
-          'courierProfile': {
-            'vehicleType': _invitationData!['vehicleType'],
-            'licensePlate': _invitationData!['licensePlate'],
-          },
-        });
-        print('✅ User document created in Firestore');
-      } catch (firestoreError) {
-        print('❌ Firestore permission error: $firestoreError');
-        // Rollback: Hapus user dari Auth jika gagal create document
-        await credential.user?.delete();
-        throw Exception(
-          'Gagal membuat profil user di database.\n\n'
-          'Kemungkinan penyebab:\n'
-          '1. Firestore Security Rules tidak mengizinkan\n'
-          '2. Masalah koneksi internet\n\n'
-          'Silakan hubungi admin untuk bantuan.'
-        );
-      }
-
-      // 3. Hapus invitation (sudah digunakan)
-      await FirebaseFirestore.instance
-          .collection('kurir_invitations')
-          .doc(_tokenController.text.trim())
-          .delete();
-      
-      print('✅ Invitation token deleted');
+      // 2. Update flag mustChangePassword di Firestore user doc
+      await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).update({
+        'mustChangePassword': false,
+      });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Registrasi berhasil! Silakan login dengan email dan password yang baru dibuat.'),
+            content: Text('Password berhasil diubah. Selamat bertugas!'),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 3),
           ),
         );
 
-        // Sign out dan kembali ke login
-        await FirebaseAuth.instance.signOut();
-        print('✅ Signed out, navigating to login');
         Navigator.pop(context);
       }
     } on FirebaseAuthException catch (e) {
-      print('❌ FirebaseAuth error: ${e.code} - ${e.message}');
+      print('FirebaseAuth error: ${e.code} - ${e.message}');
       if (mounted) {
         String errorMsg = ErrorHandler.getAuthErrorMessage(e);
         
@@ -243,7 +118,7 @@ class _RegisterKurirPageState extends State<RegisterKurirPage> {
         );
       }
     } catch (e) {
-      print('❌ General error: $e');
+      print('General error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -272,74 +147,11 @@ class _RegisterKurirPageState extends State<RegisterKurirPage> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _tokenValidated && _invitationData != null
-              ? _buildRegistrationForm(orange)
-              : _buildTokenInputForm(orange),
+          : _buildRegistrationForm(orange),
     );
   }
 
-  // Form input token
-  Widget _buildTokenInputForm(Color orange) {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.vpn_key, size: 80, color: Color(0xFFFF7A00)),
-            const SizedBox(height: 24),
-            const Text(
-              'Registrasi Kurir KatsuChip',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFFFF7A00),
-              ),
-            ),
-            const SizedBox(height: 8),
-            
-            const SizedBox(height: 24),
-            TextField(
-              controller: _tokenController,
-              decoration: InputDecoration(
-                labelText: 'Token Invitation',
-                hintText: 'Contoh: abc123xyz',
-                prefixIcon: const Icon(Icons.key),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: Colors.white,
-                errorText: _errorMessage,
-              ),
-              onChanged: (_) {
-                if (_errorMessage != null) {
-                  setState(() => _errorMessage = null);
-                }
-              },
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: _validateInvitation,
-                icon: const Icon(Icons.check_circle),
-                label: const Text('Validasi Token', style: TextStyle(fontSize: 16)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: orange,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // Hapus form token: tidak digunakan lagi
 
   // Form registrasi (setelah token valid)
   Widget _buildRegistrationForm(Color orange) {
@@ -361,10 +173,10 @@ class _RegisterKurirPageState extends State<RegisterKurirPage> {
               ElevatedButton.icon(
                 onPressed: () {
                   setState(() {
-                    _tokenValidated = false;
                     _errorMessage = null;
-                    _invitationData = null;
+                    _userData = null;
                   });
+                  _loadCurrentUserData();
                 },
                 icon: const Icon(Icons.refresh),
                 label: const Text('Coba Lagi'),
@@ -399,7 +211,7 @@ class _RegisterKurirPageState extends State<RegisterKurirPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Halo, ${_invitationData!['name']}!\nBuat password baru untuk akun Anda.',
+              'Halo, ${(_userData?['name'] as String?) ?? 'Kurir'}!\nBuat password baru untuk akun Anda.',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 14, color: Colors.black54),
             ),
@@ -422,7 +234,7 @@ class _RegisterKurirPageState extends State<RegisterKurirPage> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                _invitationData!['email'],
+                                (_userData?['email'] as String?) ?? '-',
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,

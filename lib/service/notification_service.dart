@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/courier_models.dart';
 
 /// Service untuk mengelola notifikasi antar role
@@ -58,9 +58,9 @@ class NotificationService {
 
       await batch.commit();
 
-      print('✓ Notifikasi admin->kurir untuk order $orderCode berhasil dikirim');
+      print('? Notifikasi admin->kurir untuk order $orderCode berhasil dikirim');
     } catch (e) {
-      print('✗ Error notifyAdminToAllCouriers: $e');
+      print('? Error notifyAdminToAllCouriers: $e');
       rethrow;
     }
   }
@@ -114,9 +114,9 @@ class NotificationService {
 
       await batch.commit();
 
-      print('✓ Notifikasi kurir->pembeli untuk order $orderCode berhasil');
+      print('? Notifikasi kurir->pembeli untuk order $orderCode berhasil');
     } catch (e) {
-      print('✗ Error notifyCourierToCustomer: $e');
+      print('? Error notifyCourierToCustomer: $e');
       rethrow;
     }
   }
@@ -182,9 +182,9 @@ class NotificationService {
 
       await batch.commit();
 
-      print('✓ Notifikasi kurir->admin untuk order $orderCode berhasil');
+      print('? Notifikasi kurir->admin untuk order $orderCode berhasil');
     } catch (e) {
-      print('✗ Error notifyCourierToAdmin: $e');
+      print('? Error notifyCourierToAdmin: $e');
       rethrow;
     }
   }
@@ -219,7 +219,7 @@ class NotificationService {
           .doc(notificationId)
           .update({'read': true});
     } catch (e) {
-      print('✗ Error markAsRead: $e');
+      print('? Error markAsRead: $e');
     }
   }
 
@@ -233,7 +233,7 @@ class NotificationService {
           .doc(notificationId)
           .delete();
     } catch (e) {
-      print('✗ Error deleteNotification: $e');
+      print('? Error deleteNotification: $e');
     }
   }
 

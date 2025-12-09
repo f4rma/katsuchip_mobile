@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'admin_appbar_actions.dart';
 import 'admin_menu.dart';
@@ -128,11 +128,6 @@ class _QuickActions extends StatelessWidget {
       tile(Icons.delivery_dining, 'Kelola Kurir', 'Tambah kurir baru dan kelola akun', () {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminKurirPage()));
       }, color: Colors.blue),
-      tile(Icons.payments_outlined, 'Kelola Pembayaran', 'Verifikasi pembayaran pelanggan', () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gunakan tab Pesanan di bawah')),
-        );
-      }, color: Colors.green),
     ]);
   }
 }
@@ -178,33 +173,44 @@ class _DashboardStats {
   _DashboardStats({required this.countToday, required this.revenue30Days});
 
   static Future<_DashboardStats> load() async {
-    final now = DateTime.now();
-    final startToday = DateTime(now.year, now.month, now.day);
-    final thirtyDaysAgo = now.subtract(const Duration(days: 30));
+    try {
+      final now = DateTime.now();
+      final startToday = DateTime(now.year, now.month, now.day);
+      final thirtyDaysAgo = now.subtract(const Duration(days: 30));
 
-    final db = FirebaseFirestore.instance;
-    
-    // Query untuk pesanan hari ini
-    final ordersToday = await db.collectionGroup('orders')
-        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startToday))
-        .get();
+      final db = FirebaseFirestore.instance;
+      
+      // Query langsung ke collection 'orders'
+      final ordersToday = await db.collection('orders')
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startToday))
+          .get();
 
-    // Query untuk pendapatan 30 hari terakhir
-    final orders30 = await db.collectionGroup('orders')
-        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(thirtyDaysAgo))
-        .get();
+      // Query untuk pendapatan 30 hari terakhir
+      final orders30 = await db.collection('orders')
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(thirtyDaysAgo))
+          .get();
 
-    final countToday = ordersToday.size;
-    
-    // Hitung total pendapatan dari 30 hari
-    int totalRevenue = 0;
-    for (final doc in orders30.docs) {
-      final data = doc.data();
-      final total = (data['total'] ?? 0) as num;
-      totalRevenue += total.round();
+      final countToday = ordersToday.size;
+      
+      // Hitung total pendapatan dari 30 hari (hanya pesanan yang sudah selesai/paid)
+      int totalRevenue = 0;
+      for (final doc in orders30.docs) {
+        final data = doc.data();
+        final status = data['status'] as String?;
+        // Hanya hitung pesanan yang sudah dibayar/selesai
+        if (status == 'delivered' || status == 'completed' || status == 'paid' || 
+            status == 'menunggu' || status == 'processing' || status == 'diproses' || 
+            status == 'delivering' || status == 'diantar' || status == 'diterima') {
+          final total = (data['total'] ?? 0) as num;
+          totalRevenue += total.round();
+        }
+      }
+      
+      return _DashboardStats(countToday: countToday, revenue30Days: totalRevenue);
+    } catch (e) {
+      debugPrint('Dashboard stats error: $e');
+      return _DashboardStats(countToday: 0, revenue30Days: 0);
     }
-    
-    return _DashboardStats(countToday: countToday, revenue30Days: totalRevenue);
   }
 }
 
@@ -220,7 +226,16 @@ String _formatCurrency(num v) {
 }
 
 Future<int> _countPending() async {
-  final db = FirebaseFirestore.instance;
-  final qs = await db.collectionGroup('orders').where('status', isEqualTo: 'pending').get();
-  return qs.size;
+  try {
+    final db = FirebaseFirestore.instance;
+    
+    // Hitung pesanan dengan status 'menunggu' dan 'paid'
+    final snapshot = await db.collection('orders')
+        .where('status', whereIn: ['menunggu', 'paid']).get();
+    
+    return snapshot.size;
+  } catch (e) {
+    debugPrint('Pending count error: $e');
+    return 0;
+  }
 }

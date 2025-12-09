@@ -1,13 +1,16 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../models/models.dart';
 import 'checkout.dart';
  
 
-typedef OnCheckout = Future<void> Function(
+typedef OnCheckout = Future<Map<String, String>> Function(
   double total,
   Map<String, dynamic> address,
-  String paymentMethod,
-);
+  String paymentMethod, {
+  int? shippingFee,
+  double? deliveryDistance,
+  Map<String, double>? coordinates,
+});
 
 class CartPage extends StatefulWidget {
   final List<CartItem> items;

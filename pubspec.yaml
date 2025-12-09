@@ -1,5 +1,5 @@
 name: katsuchip_app
-description: "A new Flutter project."
+description: "Aplikasi Katsuchip"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -28,6 +28,12 @@ dependencies:
   google_maps_flutter: ^2.10.0
   geolocator: ^13.0.2
   geocoding: ^3.0.0
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  path_provider: ^2.1.5
+  gal: ^2.3.0
+  permission_handler: ^11.3.1
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:

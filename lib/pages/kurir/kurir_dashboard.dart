@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../service/auth_service.dart';
 import '../../service/courier_service.dart';
@@ -139,6 +139,13 @@ class _KurirDashboardState extends State<KurirDashboard> {
         title: const Text('Dashboard Kurir'),
         actions: [
           IconButton(
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              setState(() {});
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _keluar,
             tooltip: 'Keluar',
@@ -213,12 +220,14 @@ class _KurirDashboardState extends State<KurirDashboard> {
             ),
             const SizedBox(height: 16),
 
-            // Statistics
-            FutureBuilder<CourierStats>(
-              future: _layananKurir.getCourierStats(uid),
+            // Statistics (auto-refreshing stream for better UX)
+            StreamBuilder<CourierStats>(
+              stream: Stream.periodic(const Duration(seconds: 20))
+                  .asyncMap((_) => _layananKurir.getCourierStats(uid)),
+              initialData: CourierStats.empty(),
               builder: (context, snapshot) {
                 final stats = snapshot.data ?? CourierStats.empty();
-                
+
                 return Row(
                   children: [
                     Expanded(
@@ -287,9 +296,7 @@ class _KurirDashboardState extends State<KurirDashboard> {
 
             // Orders list
             StreamBuilder<List<CourierOrder>>(
-              stream: _filterStatus == 'semua'
-                  ? _layananKurir.getAllOrdersStream(uid)
-                  : _layananKurir.getOrdersByDeliveryStatusStream(_filterStatus, uid),
+              stream: _layananKurir.getCourierActiveOrdersStream(uid),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -300,7 +307,12 @@ class _KurirDashboardState extends State<KurirDashboard> {
                   );
                 }
 
-                final daftarPesanan = snapshot.data ?? [];
+                final allOrders = snapshot.data ?? [];
+                
+                // Filter berdasarkan status yang dipilih
+                final daftarPesanan = _filterStatus == 'semua'
+                    ? allOrders
+                    : allOrders.where((o) => o.deliveryStatus == _filterStatus).toList();
 
                 if (daftarPesanan.isEmpty) {
                   return _KosongState(filterStatus: _filterStatus);
@@ -393,10 +405,23 @@ class _BatchRouteFABState extends State<_BatchRouteFAB> {
         
         final activeOrders = snapshot.data ?? [];
         
-        // Tampilkan FAB jika ada 2+ pesanan on_delivery ATAU waiting_pickup
+        // Tampilkan FAB hanya untuk pesanan yang memang diambil oleh kurir ini
+        // Termasuk status aktif yang dimiliki kurir: claimed, picked_up, on_delivery
         final onDeliveryOrders = activeOrders
-            .where((o) => o.deliveryStatus == 'on_delivery' || o.deliveryStatus == 'waiting_pickup')
-            .toList();
+          .where((o) =>
+            o.courierId == widget.uid &&
+            (o.deliveryStatus == 'claimed' ||
+             o.deliveryStatus == 'picked_up' ||
+             o.deliveryStatus == 'on_delivery'))
+          .toList();
+        
+        // Debug: Log koordinat pesanan
+        print('??? DEBUG: ${onDeliveryOrders.length} active delivery orders for kurir ${widget.uid}:');
+        for (final o in onDeliveryOrders) {
+          final hasCoords = o.latitude != null && o.longitude != null;
+          final ownedByMe = o.courierId == widget.uid;
+          print('  ${o.code}: ${hasCoords ? "?" : "?"} coords, ${ownedByMe ? "?" : "? (${o.courierId})"} ownership - ${o.deliveryStatus}');
+        }
         
         // Update cache hanya jika count berubah
         if (onDeliveryOrders.length != _lastCount) {

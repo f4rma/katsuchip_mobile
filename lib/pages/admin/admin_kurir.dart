@@ -1,15 +1,21 @@
+﻿import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'admin_appbar_actions.dart';
 import '../../utils/error_handler.dart';
+import '../../utils/phone_formatter.dart';
 
-class AdminKurirPage extends StatelessWidget {
+class AdminKurirPage extends StatefulWidget {
   const AdminKurirPage({super.key});
 
+  @override
+  State<AdminKurirPage> createState() => _AdminKurirPageState();
+}
+
+class _AdminKurirPageState extends State<AdminKurirPage> {
   @override
   Widget build(BuildContext context) {
     const orange = Color(0xFFFF7A00);
@@ -106,9 +112,16 @@ class _KurirCard extends StatelessWidget {
     final email = data['email'] as String? ?? '-';
     final phone = data['phone'] as String? ?? '-';
     final isActive = data['isActive'] as bool? ?? true;
-    final courierProfile = data['courierProfile'] as Map<String, dynamic>?;
-    final vehicleType = courierProfile?['vehicleType'] as String? ?? '-';
-    final licensePlate = courierProfile?['licensePlate'] as String? ?? '-';
+    // Read from nested courierProfile if present, with legacy fallbacks
+    final Map<String, dynamic>? courierProfile = data['courierProfile'] as Map<String, dynamic>?;
+    final vehicleType = (courierProfile != null ? courierProfile['vehicleType'] as String? : null)
+      ?? (data['vehicleType'] as String?)
+      ?? (data['vehicle'] as String?)
+      ?? '-';
+    final licensePlate = (courierProfile != null ? courierProfile['licensePlate'] as String? : null)
+      ?? (data['licensePlate'] as String?)
+      ?? (data['plate'] as String?)
+      ?? '-';
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -278,23 +291,28 @@ class _AddKurirPageState extends State<_AddKurirPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  // _passwordController dihapus - kurir akan set password saat aktivasi
   final _phoneController = TextEditingController();
   final _vehicleController = TextEditingController();
   final _plateController = TextEditingController();
   
   bool _isLoading = false;
-  // _obscurePassword dihapus - tidak ada password field lagi
+  String? _generatedPassword;
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    // _passwordController.dispose() dihapus
     _phoneController.dispose();
     _vehicleController.dispose();
     _plateController.dispose();
     super.dispose();
+  }
+
+  // Generate random password 8 karakter (huruf + angka)
+  String _generateRandomPassword() {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final random = Random.secure();
+    return List.generate(8, (index) => chars[random.nextInt(chars.length)]).join();
   }
 
   Future<void> _registerKurir() async {
@@ -303,28 +321,37 @@ class _AddKurirPageState extends State<_AddKurirPage> {
     setState(() => _isLoading = true);
 
     try {
-      // Generate unique invitation token
-      final invitationToken = FirebaseFirestore.instance.collection('kurir_invitations').doc().id;
+      // Generate password random
+      final generatedPassword = _generateRandomPassword();
       
-      // Simpan sebagai "pending approval" di collection kurir_invitations
-      final invitationDoc = FirebaseFirestore.instance.collection('kurir_invitations').doc(invitationToken);
+      final email = _emailController.text.trim();
+      final phoneFormatted = _phoneController.text.trim();
+      final phone = PhoneNumberFormatter.cleanPhoneNumber(phoneFormatted);
       
-      await invitationDoc.set({
-        'email': _emailController.text.trim(),
-        // tempPassword dihapus - kurir akan set password sendiri saat aktivasi
+      // LANGSUNG buat Firebase Auth user
+      final UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: generatedPassword,
+      );
+      
+      final uid = userCredential.user!.uid;
+      
+      // Simpan data kurir langsung ke collection users
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'email': email,
         'name': _nameController.text.trim(),
-        'phone': _phoneController.text.trim(),
+        'phone': phone,
+        'role': 'kurir',
         'vehicleType': _vehicleController.text.trim(),
         'licensePlate': _plateController.text.trim(),
-        'status': 'pending',
-        'invitationToken': invitationToken,
-        'tokenExpiry': DateTime.now().add(const Duration(days: 7)), // 7 hari expire
+        'isActive': true,
+        'mustChangePassword': true, // Flag untuk wajib ganti password
         'createdAt': FieldValue.serverTimestamp(),
         'createdBy': FirebaseAuth.instance.currentUser?.uid,
       });
-
-      // Generate simple invitation link (custom URI scheme)
-      final invitationLink = 'katsuchip://register-kurir?token=$invitationToken';
+      
+      // Simpan password untuk ditampilkan di dialog
+      _generatedPassword = generatedPassword;
 
       if (mounted) {
         showDialog(
@@ -335,7 +362,7 @@ class _AddKurirPageState extends State<_AddKurirPage> {
               children: [
                 Icon(Icons.check_circle, color: Colors.green, size: 28),
                 SizedBox(width: 12),
-                Text('Undangan Dibuat'),
+                Text('Kurir Berhasil Didaftarkan'),
               ],
             ),
             content: Column(
@@ -343,7 +370,7 @@ class _AddKurirPageState extends State<_AddKurirPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Token undangan berhasil dibuat:',
+                  'Akun kurir berhasil dibuat! Kirimkan kredensial berikut:',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                 ),
                 const SizedBox(height: 12),
@@ -354,19 +381,33 @@ class _AddKurirPageState extends State<_AddKurirPage> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.blue.shade200),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.key, color: Colors.blue, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: SelectableText(
-                          invitationToken,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
+                      Row(
+                        children: [
+                          const Icon(Icons.email, color: Colors.blue, size: 18),
+                          const SizedBox(width: 8),
+                          const Text('Email:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      SelectableText(
+                        email,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Icon(Icons.lock, color: Colors.blue, size: 18),
+                          const SizedBox(width: 8),
+                          const Text('Password Sementara:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      SelectableText(
+                        _generatedPassword ?? '',
+                        style: const TextStyle(fontSize: 13, fontFamily: 'monospace', fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -384,7 +425,7 @@ class _AddKurirPageState extends State<_AddKurirPage> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Token berlaku 7 hari dan hanya bisa digunakan 1x',
+                          'Kurir akan diminta mengubah password saat login pertama',
                           style: TextStyle(fontSize: 11, color: Colors.black87),
                         ),
                       ),
@@ -393,7 +434,7 @@ class _AddKurirPageState extends State<_AddKurirPage> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Pilih cara mengirim undangan:',
+                  'Pilih cara mengirim kredensial:',
                   style: TextStyle(fontSize: 13, color: Colors.black54),
                 ),
               ],
@@ -403,23 +444,26 @@ class _AddKurirPageState extends State<_AddKurirPage> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () async {
-                    final phoneNumber = _phoneController.text.trim().replaceAll(RegExp(r'[^\d]'), '');
+                    // Format nomor HP untuk WhatsApp (hilangkan semua karakter non-digit)
+                    final phoneClean = phone.replaceAll(RegExp(r'[^\d]'), '');
+                    
+                    // Format pesan WhatsApp
                     final message = Uri.encodeComponent(
                       'Halo ${_nameController.text.trim()},\n\n'
-                      'Selamat! Anda diundang menjadi Kurir KatsuChip! 🎉\n\n'
-                      '📱 CARA REGISTRASI:\n\n'
-                      '▶️ Buka aplikasi KatsuChip di HP Anda\n'
-                      '▶️ Login dengan token berikut:\n\n'
-                      '🔑 TOKEN: $invitationToken\n\n'
-                      '(Copy token di atas, lalu paste di aplikasi KatsuChip)\n\n'
-                      '📧 Email: ${_emailController.text.trim()}\n'
-                      '🔒 Anda akan diminta membuat password saat aktivasi\n\n'
-                      '⏰ Token berlaku 7 hari\n'
-                      '✅ Hanya bisa digunakan 1x\n\n'
-                      'Jika ada kendala, hubungi admin. Terima kasih!'
+                      'Selamat! Akun Kurir KatsuChip Anda sudah dibuat! 🎉\n\n'
+                      '📋 *CARA LOGIN:*\n\n'
+                      '1️⃣ Buka aplikasi KatsuChip\n'
+                      '2️⃣ Login dengan kredensial berikut:\n\n'
+                      '📧 *Email:* $email\n'
+                      '🔑 *Password Sementara:* ${_generatedPassword ?? ''}\n\n'
+                      '⚠️ *PENTING:*\n'
+                      'Saat login pertama kali, Anda akan diminta mengubah password.\n'
+                      'Password di atas hanya untuk login pertama saja.\n\n'
+                      'Jika ada kendala, hubungi admin.\n'
+                      'Terima kasih! 🙏'
                     );
                     
-                    final Uri whatsappUri = Uri.parse('https://wa.me/$phoneNumber?text=$message');
+                    final Uri whatsappUri = Uri.parse('https://wa.me/$phoneClean?text=$message');
                     
                     if (await canLaunchUrl(whatsappUri)) {
                       await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
@@ -431,7 +475,7 @@ class _AddKurirPageState extends State<_AddKurirPage> {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('❌ Tidak bisa membuka WhatsApp'),
+                            content: Text('? Tidak bisa membuka WhatsApp'),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -453,19 +497,23 @@ class _AddKurirPageState extends State<_AddKurirPage> {
                   onPressed: () async {
                     final Uri emailUri = Uri(
                       scheme: 'mailto',
-                      path: _emailController.text.trim(),
+                      path: email,
                       queryParameters: {
-                        'subject': 'Undangan Kurir KatsuChip',
+                        'subject': 'Akun Kurir KatsuChip - Kredensial Login',
                         'body': 'Halo ${_nameController.text.trim()},\n\n'
-                            'Anda diundang jadi kurir KatsuChip.\n\n'
-                            'Cara Registrasi:\n'
-                            '1. Download aplikasi KatsuChip\n'
-                            '2. Buka aplikasi\n'
-                            '3. Masukkan token di bawah saat diminta\n'
-                            '4. Buat password baru saat aktivasi\n\n'
-                            'Token Invitation:\n$invitationToken\n\n'
-                            'Email: ${_emailController.text.trim()}\n\n'
-                            'Token berlaku 7 hari.',
+                            'Selamat! Akun Kurir KatsuChip Anda sudah dibuat.\n\n'
+                            'KREDENSIAL LOGIN:\n'
+                            'Email: $email\n'
+                            'Password Sementara: ${_generatedPassword ?? ''}\n\n'
+                            'CARA LOGIN:\n'
+                            '1. Buka aplikasi KatsuChip\n'
+                            '2. Login dengan email dan password di atas\n'
+                            '3. Anda akan diminta mengubah password\n\n'
+                            'PENTING:\n'
+                            'Password di atas hanya untuk login pertama kali.\n'
+                            'Setelah login, Anda harus mengubah password.\n\n'
+                            'Jika ada kendala, hubungi admin.\n'
+                            'Terima kasih!',
                       },
                     );
                     
@@ -479,7 +527,7 @@ class _AddKurirPageState extends State<_AddKurirPage> {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('❌ Tidak bisa membuka aplikasi email'),
+                            content: Text('? Tidak bisa membuka aplikasi email'),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -499,11 +547,12 @@ class _AddKurirPageState extends State<_AddKurirPage> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: invitationToken));
+                    final credentials = 'Email: ${_emailController.text.trim()}\nPassword: ${_generatedPassword ?? ''}';
+                    await Clipboard.setData(ClipboardData(text: credentials));
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('✅ Token berhasil disalin!'),
+                          content: Text('? Kredensial berhasil disalin!'),
                           duration: Duration(seconds: 2),
                         ),
                       );
@@ -523,11 +572,19 @@ class _AddKurirPageState extends State<_AddKurirPage> {
           ),
         );
       }
-    } on FirebaseException catch (e) {
+    } on FirebaseAuthException catch (e) {
       if (mounted) {
+        String errorMessage = 'Gagal mendaftarkan kurir';
+        if (e.code == 'email-already-in-use') {
+          errorMessage = 'Email sudah digunakan';
+        } else if (e.code == 'weak-password') {
+          errorMessage = 'Password terlalu lemah';
+        } else if (e.code == 'invalid-email') {
+          errorMessage = 'Format email tidak valid';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(ErrorHandler.getFirestoreErrorMessage(e)),
+            content: Text(errorMessage),
             backgroundColor: Colors.red,
           ),
         );
@@ -583,12 +640,14 @@ class _AddKurirPageState extends State<_AddKurirPage> {
               },
             ),
             const SizedBox(height: 12),
-            // Password dihapus - kurir akan set password saat aktivasi dengan token
             _buildTextField(
               controller: _phoneController,
               label: 'Nomor HP',
               icon: Icons.phone,
               keyboardType: TextInputType.phone,
+              inputFormatters: [
+                PhoneNumberFormatter(),
+              ],
               validator: (v) => v?.isEmpty ?? true ? 'Nomor HP wajib diisi' : null,
             ),
             const SizedBox(height: 12),
@@ -649,9 +708,11 @@ class _AddKurirPageState extends State<_AddKurirPage> {
     TextInputType? keyboardType,
     bool obscureText = false,
     String? Function(String?)? validator,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return TextFormField(
       controller: controller,
+      inputFormatters: inputFormatters,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),
@@ -672,6 +733,46 @@ class _AddKurirPageState extends State<_AddKurirPage> {
       ),
       keyboardType: keyboardType,
       obscureText: obscureText,
+      validator: validator,
+    );
+  }
+
+  Widget _buildPasswordField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required bool obscureText,
+    required VoidCallback onToggleObscure,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: obscureText,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        suffixIcon: IconButton(
+          icon: Icon(
+            obscureText ? Icons.visibility_off : Icons.visibility,
+            color: Colors.grey,
+          ),
+          onPressed: onToggleObscure,
+        ),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade200),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFFF7A00), width: 2),
+        ),
+      ),
       validator: validator,
     );
   }

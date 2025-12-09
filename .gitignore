@@ -53,14 +53,21 @@ lib/firebase_options.dart
 *.keystore
 *.jks
 
-# API keys configuration (keep .example file only)
+# API keys and sensitive configuration files
 lib/config/api_keys.dart
 lib/config/maps_config.dart
+lib/config/delivery_config.dart
 
 # Documentation files (keep README.md only)
 *_GUIDE.md
 *_SETUP.md
 *_SYSTEM.md
 *_INTEGRATION.md
+*_CHANGES.md
+*_TESTING.md
 BEST_PRACTICES.md
 ROUTE_OPTIMIZATION_GUIDE.md
+LAPORAN_PENGUJIAN.md
+TESTING_CHECKLIST.md
+WEBHOOK_URL.md
+ONGKIR_DINAMIS.md

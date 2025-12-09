@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../service/auth_service.dart';
@@ -56,6 +56,13 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
     try {
       // Jika ada activeOrders (dari FAB), langsung optimasi rute dari pesanan tersebut
       if (widget.activeOrders != null && widget.activeOrders!.isNotEmpty) {
+        print('?? DEBUG: Processing ${widget.activeOrders!.length} active orders');
+        
+        // Debug: print koordinat setiap order
+        for (final order in widget.activeOrders!) {
+          print('  Order ${order.code}: lat=${order.latitude}, lng=${order.longitude}');
+        }
+        
         final optimizedOrders = widget.activeOrders!
             .where((o) => o.latitude != null && o.longitude != null)
             .map((order) => OrderLocation(
@@ -70,9 +77,44 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
                 ))
             .toList();
 
+        print('  ? Valid orders with coordinates: ${optimizedOrders.length}');
+
         if (optimizedOrders.isEmpty) {
+          // Tampilkan dialog dengan informasi lebih detail
+          if (mounted) {
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Koordinat Tidak Valid'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Pesanan tidak memiliki koordinat pengiriman yang valid.'),
+                    const SizedBox(height: 12),
+                    const Text('Detail:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    ...widget.activeOrders!.map((o) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '${o.code}: ${o.latitude != null && o.longitude != null ? "?" : "?"} (${o.address})',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                      ),
+                    )),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+          }
+          
           setState(() {
-            _error = 'Tidak ada pesanan dengan koordinat valid';
+            _error = 'Tidak ada pesanan dengan koordinat valid (${widget.activeOrders!.length} pesanan tanpa lat/lng)';
             _isLoading = false;
           });
           return;
@@ -86,7 +128,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
         double currentLat = RouteOptimizerService.storeLat;
         double currentLng = RouteOptimizerService.storeLon;
         
-        print('🚀 Calculating route distance:');
+        print('?? Calculating route distance:');
         print('   Start: ($currentLat, $currentLng)');
         
         for (int i = 0; i < route.length; i++) {
@@ -108,12 +150,12 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
         // Tambahkan faktor koreksi 1.3 untuk jarak jalan sebenarnya
         totalDistance = totalDistance * 1.3;
         
-        print('   📏 Total distance (with road factor): ${totalDistance.toStringAsFixed(2)} km');
+        print('   ?? Total distance (with road factor): ${totalDistance.toStringAsFixed(2)} km');
         
         // Estimasi waktu realistis untuk pengiriman dalam kota
         final estimatedTime = _estimateTime(totalDistance, route.length);
         
-        print('   ⏱️ Estimated time: $estimatedTime min');
+        print('   ?? Estimated time: $estimatedTime min');
 
         setState(() {
           _batches = [
@@ -161,11 +203,11 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
         );
       }).toList();
 
-      print('📦 Total orders waiting_pickup: ${orders.length}');
+      print('?? Total orders waiting_pickup: ${orders.length}');
 
       // Group nearby orders (dalam radius 2km)
       final groupedBatches = RouteOptimizerService.groupNearbyOrders(orders);
-      print('🗂️ Grouped into ${groupedBatches.length} batches');
+      print('??? Grouped into ${groupedBatches.length} batches');
 
       // Optimize each batch dan convert ke OrderBatch
       final List<OrderBatch> batches = [];
@@ -192,7 +234,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
         _isLoading = false;
       });
     } catch (e) {
-      print('❌ Error loading batches: $e');
+      print('? Error loading batches: $e');
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -210,7 +252,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
   Future<void> _openBatchInMaps(OrderBatch batch) async {
     try {
       // Helper validasi koordinat
-      bool _isValid(double? lat, double? lng) {
+      bool isValid(double? lat, double? lng) {
         if (lat == null || lng == null) return false;
         if (lat == 0 && lng == 0) return false;
         if (lat < -90 || lat > 90) return false;
@@ -220,7 +262,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
 
       // Filter orders dengan koordinat valid
       final validOrders = batch.orders
-          .where((o) => _isValid(o.latitude, o.longitude))
+          .where((o) => isValid(o.latitude, o.longitude))
           .toList();
 
       if (validOrders.isEmpty) {
@@ -255,7 +297,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
       // Batasi waypoint maksimum (Google URL informal batas ~23). Jika melebihi, kita potong.
       const maxWaypoints = 23; // termasuk destinasi terakhir
       if (waypointStrings.length > maxWaypoints) {
-        print('⚠ Terlalu banyak titik (${waypointStrings.length}), dipotong ke $maxWaypoints');
+        print('? Terlalu banyak titik (${waypointStrings.length}), dipotong ke $maxWaypoints');
         waypointStrings.removeRange(maxWaypoints, waypointStrings.length);
       }
 
@@ -270,7 +312,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
         '&travelmode=driving',
       );
 
-      print('🗺️ Opening batch maps: $directionsUrl');
+      print('??? Opening batch maps: $directionsUrl');
 
       if (await canLaunchUrl(directionsUrl)) {
         await launchUrl(directionsUrl, mode: LaunchMode.externalApplication);
@@ -279,7 +321,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
         final searchQueries = middle.take(5).map((e) => '&query=$e').join();
         final searchUrl = Uri.parse(
             'https://www.google.com/maps/search/?api=1&query=$destination$searchQueries');
-        print('⚠ Directions gagal, mencoba search fallback: $searchUrl');
+        print('? Directions gagal, mencoba search fallback: $searchUrl');
         if (await canLaunchUrl(searchUrl)) {
           await launchUrl(searchUrl, mode: LaunchMode.externalApplication);
         } else {
@@ -353,7 +395,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
           // Cek apakah order ada
           final orderDoc = await orderRef.get();
           if (!orderDoc.exists) {
-            print('⚠️ Order ${order.orderId} tidak ditemukan');
+            print('?? Order ${order.orderId} tidak ditemukan');
             continue;
           }
 
@@ -387,7 +429,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
             });
           }
         } catch (e) {
-          print('❌ Error update order ${order.orderId}: $e');
+          print('? Error update order ${order.orderId}: $e');
           // Lanjutkan ke order berikutnya
         }
       }
@@ -397,7 +439,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✓ ${batch.orders.length} pesanan berhasil diambil!'),
+            content: Text('? ${batch.orders.length} pesanan berhasil diambil!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -431,7 +473,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
             .where((o) => batchOrderIds.contains(o.orderId))
             .toList();
         
-        print('✓ Using ${courierOrders.length} orders from activeOrders (no Firestore fetch)');
+        print('? Using ${courierOrders.length} orders from activeOrders (no Firestore fetch)');
       } else {
         // Mode normal: fetch dari Firestore
         courierOrders = [];
@@ -450,10 +492,10 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
                 orderDoc.data()!,
               ));
             } else {
-              print('⚠️ Order ${orderLoc.orderId} tidak ditemukan di Firestore');
+              print('?? Order ${orderLoc.orderId} tidak ditemukan di Firestore');
             }
           } catch (e) {
-            print('❌ Error fetch order ${orderLoc.orderId}: $e');
+            print('? Error fetch order ${orderLoc.orderId}: $e');
             // Lanjutkan ke order berikutnya
           }
         }
@@ -488,7 +530,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
         _pickupBatch(batch);
       }
     } catch (e) {
-      print('❌ Error _previewRoute: $e');
+      print('? Error _previewRoute: $e');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -553,41 +595,54 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
                 )
               : _batches.isEmpty
                   ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.check_circle_outline, size: 64, color: Colors.grey.shade400),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Tidak ada pesanan yang menunggu pickup',
-                            style: TextStyle(color: Colors.grey.shade600),
-                          ),
-                        ],
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              widget.activeOrders != null 
+                                  ? Icons.location_off 
+                                  : Icons.check_circle_outline, 
+                              size: 64, 
+                              color: Colors.grey.shade400
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              widget.activeOrders != null
+                                  ? 'Pesanan tidak memiliki koordinat pengiriman'
+                                  : 'Tidak ada pesanan yang menunggu pickup',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (widget.activeOrders != null) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                'Alamat pengiriman perlu diperbarui dengan koordinat yang valid',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     )
                   : RefreshIndicator(
                       onRefresh: _loadBatches,
-                      child: _batches.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.check_circle_outline, size: 64, color: Colors.grey.shade400),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'Tidak ada pesanan',
-                                    style: TextStyle(color: Colors.grey.shade600),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : _BatchContentView(
-                              batch: _batches.first,
-                              onOpenMaps: () => _openBatchInMaps(_batches.first),
-                              onPreviewRoute: () => _previewRoute(_batches.first),
-                              onPickup: widget.activeOrders != null ? null : () => _pickupBatch(_batches.first),
-                              isActiveMode: widget.activeOrders != null,
-                            ),
+                      child: _BatchContentView(
+                        batch: _batches.first,
+                        onOpenMaps: () => _openBatchInMaps(_batches.first),
+                        onPreviewRoute: () => _previewRoute(_batches.first),
+                        onPickup: widget.activeOrders != null ? null : () => _pickupBatch(_batches.first),
+                        isActiveMode: widget.activeOrders != null,
+                      ),
                     ),
     );
   }
@@ -736,47 +791,43 @@ class _BatchContentView extends StatelessWidget {
           ),
         ),
 
-        // Hanya tampilkan buttons tambahan jika bukan active mode
+        // Tombol Preview Rute selalu tampil (baik active mode maupun normal)
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: OutlinedButton.icon(
+            onPressed: onPreviewRoute,
+            icon: const Icon(Icons.map, size: 20),
+            label: Text(isActiveMode ? 'Lihat Rute' : 'Preview Rute'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: orange,
+              side: BorderSide(color: orange, width: 2),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+
+        // Tombol Ambil Batch hanya untuk mode normal (sebelum di-claim)
         if (!isActiveMode) ...[
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 50,
-                  child: OutlinedButton.icon(
-                    onPressed: onPreviewRoute,
-                    icon: const Icon(Icons.map, size: 20),
-                    label: const Text('Preview Rute'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: orange,
-                      side: BorderSide(color: orange, width: 2),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: onPickup,
+              icon: const Icon(Icons.shopping_bag, size: 20),
+              label: const Text('Ambil Batch'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SizedBox(
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: onPickup,
-                    icon: const Icon(Icons.shopping_bag, size: 20),
-                    label: const Text('Ambil Batch'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
 
@@ -797,8 +848,6 @@ class _BatchCard extends StatefulWidget {
     required this.batch,
     required this.onOpenMaps,
     required this.onPreviewRoute,
-    this.onPickup,
-    this.isActiveMode = false,
   });
 
   @override

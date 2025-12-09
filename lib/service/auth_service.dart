@@ -1,4 +1,4 @@
-import 'package:firebase_auth/firebase_auth.dart';
+﻿import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -35,6 +35,7 @@ class AuthService {
 
   // Email/Password dengan validasi status
   Future<UserCredential> signInWithEmail(String email, String password) async {
+    // Standard Firebase Auth login
     final credential = await _auth.signInWithEmailAndPassword(
       email: email,
       password: password,
@@ -60,6 +61,21 @@ class AuthService {
     if (displayName != null && displayName.isNotEmpty) {
       await cred.user?.updateDisplayName(displayName);
     }
+    
+    // Create Firestore document for new user with role
+    if (cred.user != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(cred.user!.uid)
+          .set({
+        'email': email,
+        'name': displayName ?? '',
+        'role': 'customer',
+        'isActive': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    
     return cred;
   }
 

@@ -1,0 +1,36 @@
+/// Konfigurasi ongkir dan pricing tier
+class DeliveryConfig {
+  // Koordinat toko (titik awal pengiriman)
+  // Ganti dengan koordinat lokasi toko Anda
+  static const double storeLat = -0.000000; // latitude toko
+  static const double storeLon = 100.000000; // longitude toko
+  
+  // Alamat toko untuk display
+  static const String storeAddress = 'Alamat Lengkap Toko Anda';
+  
+  // ==== PRICING TIERS =====
+
+  // Pesanan di atas jarak ini akan ditolak
+  static const double maxDeliveryDistance = 15.0;
+  
+  // Biaya ongkir per tier jarak
+  // Sesuaikan dengan tarif ongkir Anda
+  static const List<DeliveryTier> pricingTiers = [
+    DeliveryTier(maxKm: 2.0, fee: 5000, label: '0-2 km'),
+    DeliveryTier(maxKm: 5.0, fee: 8000, label: '2-5 km'),
+    DeliveryTier(maxKm: 10.0, fee: 12000, label: '5-10 km'),
+    DeliveryTier(maxKm: 15.0, fee: 18000, label: '10-15 km'),
+  ];
+}
+
+class DeliveryTier {
+  final double maxKm;
+  final int fee;
+  final String label;
+  
+  const DeliveryTier({
+    required this.maxKm,
+    required this.fee,
+    required this.label,
+  });
+}

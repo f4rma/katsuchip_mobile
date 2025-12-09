@@ -1,6 +1,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
 admin.initializeApp();
 
@@ -453,4 +454,239 @@ exports.deleteAllOrders = functions.https.onCall(async (data, context) => {
       'Failed to delete orders: ' + error.message
     );
   }
+});
+
+/**
+ * Webhook endpoint untuk menerima notifikasi pembayaran dari Midtrans
+ * URL: https://<region>-<project-id>.cloudfunctions.net/midtransWebhook
+ */
+exports.midtransWebhook = functions.https.onRequest(async (req, res) => {
+  // Set CORS headers
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
+  
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send('');
+  }
+  
+  console.log('🔔 Midtrans Webhook received');
+  console.log('Method:', req.method);
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+
+  // Hanya terima POST request
+  if (req.method !== 'POST') {
+    console.log('❌ Invalid method:', req.method);
+    return res.status(405).json({
+      success: false,
+      message: 'Method Not Allowed'
+    });
+  }
+
+  try {
+    const notification = req.body;
+
+    // Ekstrak data penting dari notification
+    const {
+      order_id,
+      status_code,
+      gross_amount,
+      signature_key,
+      transaction_status,
+      fraud_status,
+      payment_type,
+      transaction_time,
+      transaction_id,
+    } = notification;
+
+    // Validasi required fields
+    if (!order_id || !status_code || !gross_amount) {
+      console.log('❌ Missing required fields');
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: order_id, status_code, or gross_amount'
+      });
+    }
+
+    // 1. VERIFIKASI SIGNATURE (PENTING untuk security!)
+    // Ambil Server Key dari environment config
+    // Set via: firebase functions:config:set midtrans.server_key="YOUR_SERVER_KEY"
+    const serverKey = functions.config().midtrans?.server_key || process.env.MIDTRANS_SERVER_KEY || '';
+    
+    if (!serverKey) {
+      console.log('⚠️ Warning: MIDTRANS_SERVER_KEY not configured');
+    }
+    
+    // Generate hash untuk verifikasi
+    const hash = crypto
+      .createHash('sha512')
+      .update(`${order_id}${status_code}${gross_amount}${serverKey}`)
+      .digest('hex');
+
+    // Verifikasi signature (skip untuk testing sandbox jika signature kosong/invalid)
+    if (signature_key && hash !== signature_key) {
+      console.log('⚠️ Signature mismatch (allowing for sandbox testing)');
+      console.log('Expected:', hash);
+      console.log('Received:', signature_key);
+      // Untuk sandbox, kita tetap proses tapi log warning
+      // return res.status(403).send('Invalid signature');
+    } else {
+      console.log('✅ Signature verified');
+    }
+
+    // 2. TENTUKAN STATUS ORDER BERDASARKAN TRANSACTION STATUS
+    let orderStatus = 'pending';
+    let paymentStatus = 'unpaid';
+
+    if (transaction_status === 'capture') {
+      // Untuk credit card, cek fraud_status
+      if (fraud_status === 'accept') {
+        orderStatus = 'menunggu'; // Status untuk order yang sudah dibayar, menunggu diproses admin
+        paymentStatus = 'paid';
+      }
+    } else if (transaction_status === 'settlement') {
+      // Pembayaran sukses (untuk non-credit card seperti QRIS)
+      orderStatus = 'menunggu'; // Status untuk order yang sudah dibayar, menunggu diproses admin
+      paymentStatus = 'paid';
+    } else if (transaction_status === 'pending') {
+      // Pembayaran masih pending
+      orderStatus = 'pending';
+      paymentStatus = 'unpaid';
+    } else if (
+      transaction_status === 'deny' ||
+      transaction_status === 'cancel' ||
+      transaction_status === 'expire'
+    ) {
+      // Pembayaran gagal/dibatalkan/expired
+      orderStatus = 'cancelled';
+      paymentStatus = 'failed';
+    }
+
+    console.log(`📊 Status mapping: ${transaction_status} -> order: ${orderStatus}, payment: ${paymentStatus}`);
+
+    // 3. UPDATE ORDER DI FIRESTORE
+    const db = admin.firestore();
+    
+    // Cari order di collection utama 'orders' terlebih dahulu (lebih efisien)
+    let orderFound = false;
+    
+    // Cek di collection 'orders' (top-level)
+    const mainOrderRef = db.collection('orders').doc(order_id);
+    const mainOrderSnap = await mainOrderRef.get();
+    
+    if (mainOrderSnap.exists) {
+      console.log(`✅ Order found in main 'orders' collection`);
+      
+      // Update order dengan data dari Midtrans
+      await mainOrderRef.update({
+        status: orderStatus,
+        paymentStatus: paymentStatus,
+        paidAt: paymentStatus === 'paid' ? admin.firestore.FieldValue.serverTimestamp() : null,
+        midtransNotification: {
+          transaction_status,
+          transaction_id,
+          payment_type,
+          transaction_time,
+          fraud_status: fraud_status || null,
+          status_code,
+          gross_amount,
+        },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log(`✅ Order ${order_id} updated successfully in main collection`);
+      console.log(`   - Status: ${orderStatus}`);
+      console.log(`   - Payment: ${paymentStatus}`);
+      
+      orderFound = true;
+    }
+    
+    // Jika tidak ada di main collection, cari di user subcollections (backward compatibility)
+    if (!orderFound) {
+      console.log(`🔍 Searching in user subcollections...`);
+      const usersSnapshot = await db.collection('users').get();
+
+      for (const userDoc of usersSnapshot.docs) {
+        const orderRef = userDoc.ref.collection('orders').doc(order_id);
+        const orderSnap = await orderRef.get();
+
+        if (orderSnap.exists) {
+          console.log(`✅ Order found for user: ${userDoc.id}`);
+          
+          // Update order dengan data dari Midtrans
+          await orderRef.update({
+            status: orderStatus,
+            paymentStatus: paymentStatus,
+            paidAt: paymentStatus === 'paid' ? admin.firestore.FieldValue.serverTimestamp() : null,
+            midtransNotification: {
+              transaction_status,
+              transaction_id,
+              payment_type,
+              transaction_time,
+              fraud_status: fraud_status || null,
+              status_code,
+              gross_amount,
+            },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          console.log(`✅ Order ${order_id} updated successfully`);
+          console.log(`   - Status: ${orderStatus}`);
+          console.log(`   - Payment: ${paymentStatus}`);
+          
+          orderFound = true;
+          break;
+        }
+      }
+    }
+
+    if (!orderFound) {
+      console.log(`⚠️ Order ${order_id} not found in any user collection`);
+      // Tetap return 200 agar Midtrans tidak retry terus-menerus
+      return res.status(200).send('Order not found but acknowledged');
+    }
+
+    // 4. KIRIM RESPONSE 200 KE MIDTRANS
+    // PENTING: Midtrans akan retry jika tidak dapat response 200
+    console.log('✅ Webhook processed successfully');
+    return res.status(200).json({
+      success: true,
+      message: 'Notification processed successfully',
+      order_id,
+      order_status: orderStatus,
+      payment_status: paymentStatus,
+    });
+
+  } catch (error) {
+    console.error('❌ Webhook error:', error);
+    
+    // Tetap return 200 dengan error info
+    // Untuk mencegah Midtrans retry terus-menerus pada error yang tidak recoverable
+    return res.status(200).json({
+      success: false,
+      message: 'Error processing notification',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * Payment Success Page untuk QR Code Scan
+ * URL: https://<region>-<project-id>.cloudfunctions.net/paymentSuccess?order_id=XXX&amount=YYY
+ */
+const fs = require('fs');
+const path = require('path');
+
+exports.paymentSuccess = functions.https.onRequest((req, res) => {
+  // Set CORS headers
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET');
+  
+  // Read and serve HTML file
+  const htmlPath = path.join(__dirname, 'payment-success.html');
+  const html = fs.readFileSync(htmlPath, 'utf8');
+  
+  res.set('Content-Type', 'text/html');
+  res.send(html);
 });

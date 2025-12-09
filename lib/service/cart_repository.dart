@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:random_string/random_string.dart';
 import '../models/models.dart';
 import 'geocoding_service.dart';
@@ -31,7 +31,7 @@ class CartRepository {
   }
 
   Future<void> increment(String uid, MenuItemData item, int by) async {
-    print('📦 CartRepository.increment:');
+    print('?? CartRepository.increment:');
     print('   UID: $uid');
     print('   Item: ${item.name} (${item.id})');
     print('   By: $by');
@@ -56,9 +56,9 @@ class CartRepository {
         }
       });
       
-      print('✅ Cart transaction successful');
+      print('? Cart transaction successful');
     } catch (e) {
-      print('❌ Cart transaction failed: $e');
+      print('? Cart transaction failed: $e');
       rethrow;
     }
   }
@@ -76,6 +76,9 @@ class CartRepository {
     double total, {
     required Map<String, dynamic> shippingAddress,
     required String paymentMethod,
+    int? shippingFee,
+    double? deliveryDistance,
+    Map<String, double>? coordinates, // Koordinat yang sudah di-geocode (opsional)
   }) async {
     final doc = _orderCol(uid).doc();
     final code = randomAlphaNumeric(6).toUpperCase();
@@ -93,17 +96,20 @@ class CartRepository {
     // Geocode alamat pengiriman untuk route optimization
     final address = shippingAddress['address'] as String? ?? 
                     shippingAddress['detail'] as String? ?? '';
-    Map<String, double>? coordinates;
+    Map<String, double>? coords = coordinates; // Gunakan koordinat yang sudah di-cache jika ada
     
-    if (address.isNotEmpty) {
+    // Hanya geocode jika koordinat belum ada
+    if (coords == null && address.isNotEmpty) {
       try {
         // Coba geocode dengan alamat lengkap
-        coordinates = await GeocodingService.getCoordinates(address);
-        print('✓ Geocoding berhasil: ${coordinates?['latitude']}, ${coordinates?['longitude']}');
+        coords = await GeocodingService.getCoordinates(address);
+        print('? Geocoding berhasil: ${coords?['latitude']}, ${coords?['longitude']}');
       } catch (e) {
-        print('⚠ Geocoding error: $e');
+        print('? Geocoding error: $e');
         // Continue without coordinates - order tetap dibuat
       }
+    } else if (coords != null) {
+      print('? Menggunakan koordinat cache: ${coords['latitude']}, ${coords['longitude']}');
     }
     
     // Normalize shippingAddress ke format baru yang lengkap
@@ -111,8 +117,8 @@ class CartRepository {
       'name': recipientName,
       'phone': recipientPhone,
       'address': address,
-      'latitude': coordinates?['latitude'],
-      'longitude': coordinates?['longitude'],
+      'latitude': coords?['latitude'],
+      'longitude': coords?['longitude'],
       // Simpan juga data lama untuk backward compatibility
       if (shippingAddress['id'] != null) 'id': shippingAddress['id'],
       if (shippingAddress['title'] != null) 'title': shippingAddress['title'],
@@ -138,9 +144,12 @@ class CartRepository {
       'status': 'pending',
       'paymentStatus': 'unpaid',
       // Koordinat di root level untuk route optimization & query
-      'latitude': coordinates?['latitude'] ?? 0,
-      'longitude': coordinates?['longitude'] ?? 0,
+      'latitude': coords?['latitude'] ?? 0,
+      'longitude': coords?['longitude'] ?? 0,
       'address': address, // Alamat lengkap untuk display & geocoding
+      // Data ongkir dinamis
+      'shippingFee': shippingFee ?? 0,
+      'deliveryDistance': deliveryDistance ?? 0.0,
     });
 
     // kosongkan cart

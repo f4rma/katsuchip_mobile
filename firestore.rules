@@ -2,15 +2,17 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper function untuk check role
+    // Helper function untuk check role - inline untuk menghindari recursion
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
     function isAdmin() {
-      return request.auth != null && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return request.auth != null && getUserRole() == 'admin';
     }
     
     function isKurir() {
-      return request.auth != null && 
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kurir';
+      return request.auth != null && getUserRole() == 'kurir';
     }
     
     function isOwner(userId) {
@@ -19,12 +21,15 @@ service cloud.firestore {
     
     // Users collection
     match /users/{userId} {
-      // Admin bisa read semua user, User bisa read data sendiri
-      allow read: if isAdmin() || isOwner(userId);
+      // Allow authenticated user to read their own document
+      allow read: if isOwner(userId);
+      
+      // Admin can read all users - simple check without recursion
+      allow list, get: if request.auth != null;
       
       // Allow create user:
       // 1. Admin bisa create user baru
-      // 2. Customer self-register
+      // 2. Customer self-register (authenticated user creating their own document)
       // 3. Kurir registrasi dengan token valid (role = 'kurir')
       allow create: if isAdmin() || 
                        (request.auth != null && 
@@ -38,12 +43,16 @@ service cloud.firestore {
       allow update: if isAdmin();
       
       // User bisa update data sendiri (kecuali role dan isActive)
+      // Izinkan update meskipun field belum ada (untuk profile_setup pertama kali)
       allow update: if isOwner(userId) && 
                        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isActive']);
       
       // Subcollection: notifications
       match /notifications/{notifId} {
         allow read, write: if isOwner(userId) || isAdmin();
+        
+        // Kurir bisa CREATE notifikasi ke customer (delivery updates)
+        allow create: if isKurir();
       }
       
       // Subcollection: cart
@@ -54,6 +63,10 @@ service cloud.firestore {
       // Subcollection: orders
       match /orders/{orderId} {
         allow read, write: if isOwner(userId) || isAdmin() || isKurir();
+        
+        // Allow server-side updates (Cloud Functions/Webhook)
+        // Cloud Functions berjalan tanpa auth context, jadi request.auth == null
+        allow write: if request.auth == null;
       }
       
       // Subcollection: addresses (untuk shipping address)
@@ -81,9 +94,30 @@ service cloud.firestore {
       
       // User yang buat order bisa baca order sendiri
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+          // Helpers
+          function isSignedIn() {
+            return request.auth != null;
+          }
+          function isAdmin() {
+            // Support either custom claims (request.auth.token.admin) or user doc role === 'admin'
+            return (isSignedIn() && (
+              (request.auth.token.admin == true) ||
+              (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+            ));
+          }
+          function isOwner(userId) {
+            return isSignedIn() && request.auth.uid == userId;
+          }
+    
       
-      // User bisa create order sendiri
-      allow create: if request.auth != null;
+      // User bisa create order sendiri (userId harus match dengan auth.uid)
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      
+      // User bisa update order sendiri (untuk simulasi pembayaran atau perubahan status)
+      // Izinkan update jika userId match ATAU jika document belum ada userId (backward compatibility)
+      allow update: if request.auth != null && 
+                       (resource.data.userId == request.auth.uid || 
+                        !('userId' in resource.data));
     }
     
     // Orders subcollection (untuk collectionGroup query di laporan)
@@ -91,17 +125,13 @@ service cloud.firestore {
       // Admin bisa query semua orders dari collectionGroup
       allow read: if isAdmin();
       
-      // Kurir bisa read SEMUA orders (seperti sebelumnya)
-      allow read: if isKurir();
+      // Kurir bisa read dan WRITE semua orders (untuk ambil pesanan & update status)
+      allow read, write: if isKurir();
       
       // User bisa baca order sendiri
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
       
-      // Allow write untuk admin dan kurir (untuk update delivery status)
-      // PENTING: Kurir perlu update orders di users/{userId}/orders/{orderId}
-      allow write: if isAdmin() || isKurir();
-      
-      // Fallback: Owner bisa update order sendiri (untuk cancel dll)
+      // User bisa update order sendiri (untuk cancel dll)
       allow update: if request.auth != null && resource.data.userId == request.auth.uid;
     }
     

@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/courier_models.dart';
 import 'notification_service.dart';
 
@@ -53,17 +53,32 @@ class CourierService {
     });
   }
 
-  /// Stream pesanan yang sedang dikerjakan kurir tertentu
+  /// Stream pesanan yang relevan untuk kurir tertentu:
+  /// 1. Pesanan waiting_pickup (belum diambil siapapun) - bisa diambil
+  /// 2. Pesanan claimed/picked_up/on_delivery milik kurir ini - sedang dikerjakan
   Stream<List<CourierOrder>> getCourierActiveOrdersStream(String courierId) {
     return _db
         .collectionGroup('orders')
-        .where('courierId', isEqualTo: courierId)
-        .where('deliveryStatus', whereIn: ['waiting_pickup', 'on_delivery'])
+        .where('status', isEqualTo: 'delivering')
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs
           .map((doc) => CourierOrder.fromFirestore(doc.id, doc.data()))
+          .where((order) {
+            // Include jika waiting_pickup (belum ada yang ambil)
+            if (order.deliveryStatus == 'waiting_pickup') {
+              return true;
+            }
+            // Include jika sedang dikerjakan oleh kurir ini
+            if ((order.deliveryStatus == 'claimed' ||
+                 order.deliveryStatus == 'picked_up' ||
+                 order.deliveryStatus == 'on_delivery') &&
+                order.courierId == courierId) {
+              return true;
+            }
+            return false;
+          })
           .toList();
     });
   }
@@ -72,7 +87,14 @@ class CourierService {
   Future<CourierStats> getCourierStats(String courierId) async {
     try {
       final now = DateTime.now();
-      final startOfDay = DateTime(now.year, now.month, now.day);
+      // Gunakan awal hari lokal, tapi convert ke UTC untuk query Firestore
+      final startOfDayLocal = DateTime(now.year, now.month, now.day);
+      final startOfDayUtc = startOfDayLocal.toUtc();
+      
+      print('?? getCourierStats for kurir: $courierId');
+      print('   Now: $now');
+      print('   Start of day (local): $startOfDayLocal');
+      print('   Start of day (UTC): $startOfDayUtc');
 
       // Count pesanan sedang dikirim
       final onDeliverySnapshot = await _db
@@ -81,13 +103,40 @@ class CourierService {
           .where('deliveryStatus', isEqualTo: 'on_delivery')
           .get();
 
-      // Count pesanan terkirim hari ini
-      final deliveredTodaySnapshot = await _db
-          .collectionGroup('orders')
-          .where('courierId', isEqualTo: courierId)
-          .where('deliveryStatus', isEqualTo: 'delivered')
-          .where('deliveredAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
-          .get();
+      // Count pesanan terkirim hari ini (gunakan completedAt untuk konsistensi)
+      int deliveredTodayCount;
+      try {
+        final deliveredTodaySnapshot = await _db
+            .collectionGroup('orders')
+            .where('courierId', isEqualTo: courierId)
+            .where('deliveryStatus', isEqualTo: 'delivered')
+            .where('completedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDayUtc))
+            .get();
+        deliveredTodayCount = deliveredTodaySnapshot.docs.length;
+        print('   Delivered today (server query): $deliveredTodayCount');
+      } catch (e) {
+        // Fallback jika index belum tersedia: ambil delivered, filter di client berdasarkan timestamp
+        print('   ?? Fallback deliveredToday query (missing index?): $e');
+        final deliveredAll = await _db
+            .collectionGroup('orders')
+            .where('courierId', isEqualTo: courierId)
+            .where('deliveryStatus', isEqualTo: 'delivered')
+            .get();
+        deliveredTodayCount = deliveredAll.docs.where((d) {
+          final data = d.data() as Map<String, dynamic>?;
+          final ts = (data?['completedAt'] ?? data?['deliveredAt']);
+          if (ts is Timestamp) {
+            final dt = ts.toDate();
+            final isToday = dt.isAfter(startOfDayLocal) || dt.isAtSameMomentAs(startOfDayLocal);
+            if (isToday) {
+              print('   ?? Found delivered today: ${data?['code']} at $dt');
+            }
+            return isToday;
+          }
+          return false;
+        }).length;
+        print('   Delivered today (client filter): $deliveredTodayCount');
+      }
 
       // Total pengiriman
       final totalSnapshot = await _db
@@ -96,16 +145,21 @@ class CourierService {
           .where('deliveryStatus', isEqualTo: 'delivered')
           .get();
 
-      return CourierStats(
+      final stats = CourierStats(
         onDeliveryCount: onDeliverySnapshot.docs.length,
-        deliveredTodayCount: deliveredTodaySnapshot.docs.length,
+        deliveredTodayCount: deliveredTodayCount,
         totalDeliveries: totalSnapshot.docs.length,
       );
+      
+      print('CourierStats for $courierId: onDelivery=${stats.onDeliveryCount}, today=${stats.deliveredTodayCount}, total=${stats.totalDeliveries}');
+      return stats;
     } catch (e) {
-      print('✗ Error getCourierStats: $e');
+      print('Error getCourierStats: $e');
       return CourierStats.empty();
     }
   }
+
+// (Removed fake QuerySnapshot; using an integer count for fallback.)
 
   /// Kurir mulai pengiriman
   Future<void> startDelivery({
@@ -116,7 +170,7 @@ class CourierService {
     required String orderCode,
   }) async {
     try {
-      print('🚀 Memulai pengiriman: orderId=$orderId, customerId=$customerId');
+      print('?? Memulai pengiriman: orderId=$orderId, customerId=$customerId');
       print('   Kurir ID: $courierId');
       
       // Cek role user kurir
@@ -142,21 +196,33 @@ class CourierService {
       // Cek apakah order exists
       final orderDoc = await orderRef.get();
       if (!orderDoc.exists) {
-        print('✗ Order tidak ditemukan di path: users/$customerId/orders/$orderId');
+        print('? Order tidak ditemukan di path: users/$customerId/orders/$orderId');
         throw 'Order not found';
       }
       
-      print('✓ Order ditemukan, melakukan update...');
+      print('Order ditemukan, melakukan update...');
 
-      // Update order
-      await orderRef.update({
+      // Data update yang sama untuk kedua lokasi
+      final updateData = {
         'deliveryStatus': 'on_delivery',
         'courierId': courierId,
         'deliveryStartedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      // Update di subcollection user (untuk riwayat pembeli)
+      await orderRef.update(updateData);
       
-      print('✓ Update berhasil!');
+      // Update di main collection (untuk admin dashboard dan sinkronisasi)
+      try {
+        await _db.collection('orders').doc(orderId).update(updateData);
+        print('? Update main collection orders berhasil');
+      } catch (e) {
+        print('⚠️ Warning: Gagal update main collection orders: $e');
+        // Tidak throw error karena update subcollection sudah berhasil
+      }
+      
+      print('Update berhasil!');
 
       // Kirim notifikasi ke customer
       await _notificationService.notifyCourierToCustomer(
@@ -178,9 +244,9 @@ class CourierService {
         statusType: 'started',
       );
 
-      print('✓ Pengiriman dimulai untuk order $orderCode');
+      print('? Pengiriman dimulai untuk order $orderCode');
     } catch (e) {
-      print('✗ Error startDelivery: $e');
+      print('? Error startDelivery: $e');
       rethrow;
     }
   }
@@ -194,7 +260,7 @@ class CourierService {
     required String orderCode,
   }) async {
     try {
-      print('📦 Menandai pesanan terkirim: orderId=$orderId, customerId=$customerId');
+      print('?? Menandai pesanan terkirim: orderId=$orderId, customerId=$customerId');
       print('   Path akan diakses: users/$customerId/orders/$orderId');
       print('   Kurir ID: $courierId');
       
@@ -219,28 +285,40 @@ class CourierService {
           .doc(orderId);
       
       // Cek apakah order exists
-      print('🔍 Mengecek order existence...');
+      print('?? Mengecek order existence...');
       final orderDoc = await orderRef.get();
       if (!orderDoc.exists) {
-        print('✗ Order tidak ditemukan di path: users/$customerId/orders/$orderId');
+        print('? Order tidak ditemukan di path: users/$customerId/orders/$orderId');
         throw 'Order not found';
       }
       
-      print('✓ Order ditemukan!');
+      print('? Order ditemukan!');
       print('   Current status: ${orderDoc.data()?['status']}');
       print('   Current deliveryStatus: ${orderDoc.data()?['deliveryStatus']}');
-      print('🔄 Mencoba update order...');
+      print('?? Mencoba update order...');
 
-      // Update order
-      await orderRef.update({
-        'status': 'completed',
+      // Data update yang sama untuk kedua lokasi
+      final updateData = {
+        'status': 'delivered', // Konsisten dengan sistem admin yang menggunakan 'delivered' untuk selesai
         'deliveryStatus': 'delivered',
         'deliveredAt': FieldValue.serverTimestamp(),
         'completedAt': FieldValue.serverTimestamp(), // Untuk auto-cleanup di Cloud Function
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      // Update di subcollection user (untuk riwayat pembeli)
+      await orderRef.update(updateData);
       
-      print('✓ Pesanan berhasil ditandai terkirim!');
+      // Update di main collection (untuk admin dashboard dan sinkronisasi)
+      try {
+        await _db.collection('orders').doc(orderId).update(updateData);
+        print('? Update main collection orders berhasil');
+      } catch (e) {
+        print('⚠️ Warning: Gagal update main collection orders: $e');
+        // Tidak throw error karena update subcollection sudah berhasil
+      }
+      
+      print('? Pesanan berhasil ditandai terkirim!');
 
       // Kirim notifikasi ke customer
       await _notificationService.notifyCourierToCustomer(
@@ -262,9 +340,9 @@ class CourierService {
         statusType: 'completed',
       );
 
-      print('✓ Pesanan $orderCode ditandai sebagai terkirim');
+      print('? Pesanan $orderCode ditandai sebagai terkirim');
     } on FirebaseException catch (e) {
-      print('❌ Firebase error: ${e.code} - ${e.message}');
+      print('? Firebase error: ${e.code} - ${e.message}');
       
       if (e.code == 'permission-denied') {
         throw 'Akses ditolak. Pastikan Anda login sebagai kurir dan Firestore rules sudah di-deploy.';
@@ -274,7 +352,7 @@ class CourierService {
       
       throw 'Gagal menandai pesanan: ${e.message}';
     } catch (e) {
-      print('✗ Error markAsDelivered: $e');
+      print('? Error markAsDelivered: $e');
       rethrow;
     }
   }
@@ -282,7 +360,7 @@ class CourierService {
   /// Ambil detail pesanan
   Future<CourierOrder?> getOrderById(String orderId) async {
     try {
-      print('🔍 Mencari order dengan ID: $orderId');
+      print('?? Mencari order dengan ID: $orderId');
       
       // Strategi 1: Cari berdasarkan field 'id'
       final docs = await _db
@@ -292,32 +370,32 @@ class CourierService {
           .get();
       
       if (docs.docs.isNotEmpty) {
-        print('✓ Order ditemukan via field id');
+        print('? Order ditemukan via field id');
         final doc = docs.docs.first;
         return CourierOrder.fromFirestore(doc.id, doc.data());
       }
       
-      print('⚠ Order tidak ditemukan dengan field id, coba cari semua...');
+      print('? Order tidak ditemukan dengan field id, coba cari semua...');
       
       // Strategi 2: Cari di semua orders (fallback untuk debugging)
       final allOrders = await _db
           .collectionGroup('orders')
           .get();
       
-      print('📦 Total orders ditemukan: ${allOrders.docs.length}');
+      print('?? Total orders ditemukan: ${allOrders.docs.length}');
       
       for (final doc in allOrders.docs) {
         print('  - Doc ID: ${doc.id}, Field id: ${doc.data()['id']}');
         if (doc.id == orderId || doc.data()['id'] == orderId) {
-          print('✓ Order ditemukan via document ID match');
+          print('? Order ditemukan via document ID match');
           return CourierOrder.fromFirestore(doc.id, doc.data());
         }
       }
       
-      print('✗ Order tidak ditemukan sama sekali');
+      print('? Order tidak ditemukan sama sekali');
       return null;
     } catch (e) {
-      print('✗ Error getOrderById: $e');
+      print('? Error getOrderById: $e');
       return null;
     }
   }
@@ -325,7 +403,7 @@ class CourierService {
   /// Stream detail pesanan untuk kurir tertentu
   /// Kurir bisa lihat semua order (seperti sebelumnya)
   Stream<CourierOrder?> getOrderStream(String orderId, String courierId) {
-    print('🔍 Stream mencari order dengan ID: $orderId untuk kurir: $courierId');
+    print('?? Stream mencari order dengan ID: $orderId untuk kurir: $courierId');
     
     return _db
         .collectionGroup('orders')
@@ -333,16 +411,16 @@ class CourierService {
         .limit(1)
         .snapshots()
         .map((snapshot) {
-      print('📡 Stream update diterima: ${snapshot.docs.length} docs found');
+      print('?? Stream update diterima: ${snapshot.docs.length} docs found');
       
       if (snapshot.docs.isEmpty) {
-        print('⚠ Stream: Order dengan id=$orderId tidak ditemukan');
+        print('? Stream: Order dengan id=$orderId tidak ditemukan');
         return null;
       }
       
       final doc = snapshot.docs.first;
       final data = doc.data();
-      print('✓ Stream: Order ditemukan - Doc ID: ${doc.id}');
+      print('? Stream: Order ditemukan - Doc ID: ${doc.id}');
       print('  - Code: ${data['code']}');
       print('  - Status: ${data['status']}');
       print('  - DeliveryStatus: ${data['deliveryStatus']}');
@@ -359,7 +437,7 @@ class CourierService {
     required String courierId,
   }) async {
     try {
-      print('🎯 Mengambil pesanan: orderId=$orderId, userId=$userId, courierId=$courierId');
+      print('?? Mengambil pesanan: orderId=$orderId, userId=$userId, courierId=$courierId');
       
       // Langsung gunakan path lengkap: users/{userId}/orders/{orderId}
       final orderRef = _db
@@ -371,22 +449,35 @@ class CourierService {
       // Cek apakah order exists
       final orderDoc = await orderRef.get();
       if (!orderDoc.exists) {
-        print('✗ Order tidak ditemukan di path: users/$userId/orders/$orderId');
+        print('? Order tidak ditemukan di path: users/$userId/orders/$orderId');
         throw 'Order not found';
       }
       
-      print('✓ Order ditemukan, melakukan claim...');
+      print('? Order ditemukan, melakukan claim...');
 
-      await orderRef.update({
+      // Data update yang sama untuk kedua lokasi
+      final updateData = {
         'courierId': courierId,
         'deliveryStatus': 'waiting_pickup',
         'claimedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
 
-      print('✓ Pesanan $orderId berhasil di-claim oleh kurir $courierId');
+      // Update di subcollection user (untuk riwayat pembeli)
+      await orderRef.update(updateData);
+      
+      // Update di main collection (untuk admin dashboard dan sinkronisasi)
+      try {
+        await _db.collection('orders').doc(orderId).update(updateData);
+        print('? Update main collection orders berhasil');
+      } catch (e) {
+        print('⚠️ Warning: Gagal update main collection orders: $e');
+        // Tidak throw error karena update subcollection sudah berhasil
+      }
+
+      print('? Pesanan $orderId berhasil di-claim oleh kurir $courierId');
     } catch (e) {
-      print('✗ Error claimOrder: $e');
+      print('? Error claimOrder: $e');
       rethrow;
     }
   }

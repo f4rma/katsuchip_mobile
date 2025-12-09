@@ -1,17 +1,24 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'detail.dart';
 import '../models/models.dart';
 import '../service/menu_repository.dart';
 
-class MenuPage extends StatelessWidget {
+class MenuPage extends StatefulWidget {
   final void Function(MenuItemData) onAdd;
 
   const MenuPage({super.key, required this.onAdd});
 
   @override
+  State<MenuPage> createState() => _MenuPageState();
+}
+
+class _MenuPageState extends State<MenuPage> {
+  late final MenuRepository _repo = MenuRepository();
+  late final Stream<List<Map<String, dynamic>>> _menuStream = _repo.streamMenus();
+
+  @override
   Widget build(BuildContext context) {
     const orange = Color(0xFFFF7A00);
-    final repo = MenuRepository();
 
     // Fallback daftar produk statis (6 item) berbasis assets
     const staticItems = <MenuItemData>[
@@ -68,7 +75,7 @@ class MenuPage extends StatelessWidget {
       backgroundColor: const Color(0xFFFFF7ED),
       body: SafeArea(
         child: StreamBuilder<List<Map<String, dynamic>>>(
-          stream: repo.streamMenus(),
+          stream: _menuStream,
           builder: (context, snap) {
             final menus = snap.data ?? const [];
             final items = menus.isNotEmpty
@@ -140,21 +147,14 @@ class MenuPage extends StatelessWidget {
                 ...items.map((item) => _MenuCard(
                       item: item,
                       onAdd: () {
-                        onAdd(item);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${item.name} ditambahkan ke keranjang'),
-                            duration: const Duration(milliseconds: 1200),
-                            backgroundColor: Colors.green,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
+                        // Hanya panggil callback; SnackBar ditangani di parent (orange)
+                        widget.onAdd(item);
                       },
                       onOpen: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => DetailPage(item: item, onAdd: onAdd),
+                            builder: (_) => DetailPage(item: item, onAdd: widget.onAdd),
                           ),
                         );
                       },
@@ -178,8 +178,9 @@ class MenuPage extends StatelessWidget {
                             fontSize: 16,
                           )),
                       SizedBox(height: 4),
-                      Text('Gratis ongkir untuk pembelian minimal. Rp. 34.999',
+                      Text('Gratis ongkir untuk pembelian min. Rp 50.000',
                           style: TextStyle(color: Colors.white70)),
+                      SizedBox(height: 2),                    
                     ],
                   ),
                 )

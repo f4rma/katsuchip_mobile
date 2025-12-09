@@ -1,11 +1,11 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../config/maps_config.dart';
 
 /// Service untuk mendapatkan directions (polyline) dari Google Directions API
 class DirectionsService {
-  /// Decode polyline dari Google (encoded string → list of LatLng)
+  /// Decode polyline dari Google (encoded string ? list of LatLng)
   static List<LatLng> decodePolyline(String encoded) {
     List<LatLng> points = [];
     int index = 0, len = encoded.length;
@@ -52,7 +52,7 @@ class DirectionsService {
   }) async {
     // Jika API key kosong, return null (fallback ke straight line)
     if (MapsConfig.googleMapsApiKey.isEmpty) {
-      print('⚠️ Google Maps API key tidak diset, tidak bisa fetch directions');
+      print('?? Google Maps API key tidak diset, tidak bisa fetch directions');
       return null;
     }
 
@@ -103,15 +103,15 @@ class DirectionsService {
             }
           }
         } else {
-          print('⚠️ Directions API error: $status');
+          print('?? Directions API error: $status');
         }
       } else {
-        print('⚠️ HTTP error: ${response.statusCode}');
+        print('?? HTTP error: ${response.statusCode}');
       }
 
       return null;
     } catch (e) {
-      print('❌ Error fetching directions: $e');
+      print('? Error fetching directions: $e');
       return null;
     }
   }

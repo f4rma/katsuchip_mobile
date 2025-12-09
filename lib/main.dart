@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:flutter/material.dart';
@@ -9,12 +9,14 @@ import 'package:katsuchip_app/pages/cart.dart';
 import 'package:katsuchip_app/models/models.dart';
 import 'service/auth_service.dart';
 import 'service/cart_repository.dart';
+import 'service/deep_link_handler.dart';
 import 'package:katsuchip_app/pages/splash_screen.dart';
 import 'package:katsuchip_app/pages/login.dart';
 import 'package:katsuchip_app/pages/register.dart';
 import 'package:katsuchip_app/pages/register_kurir.dart';
 import 'package:katsuchip_app/pages/orders.dart';
 import 'package:katsuchip_app/pages/profile_setup.dart';
+import 'package:katsuchip_app/pages/ganti_pass_kurir.dart';
 import 'pages/profile.dart';
 import 'pages/admin/admin_main.dart';
 import 'pages/kurir/kurir_dashboard.dart';
@@ -86,6 +88,9 @@ class _AppRootState extends State<AppRoot> {
         );
       }
     }
+    
+    // Handle katsuchip://payment/confirm/{orderId}
+    // This is now handled by DeepLinkHandler in MainApp
   }
 
   @override
@@ -110,7 +115,7 @@ class _AppRootState extends State<AppRoot> {
           }
           
           return MaterialPageRoute(
-            builder: (context) => RegisterKurirPage(invitationToken: token),
+            builder: (context) => const RegisterKurirPage(),
           );
         }
         
@@ -123,6 +128,7 @@ class _AppRootState extends State<AppRoot> {
         '/register': (context) => const RegisterPage(),
         '/profile': (_) => const ProfilePage(),
         '/setup':  (_) => const ProfileSetupPage(),
+        '/first-login-change-password': (_) => const FirstLoginChangePasswordPage(),
         '/main': (context) => const MyApp(),
         '/admin': (context) => const AdminMainPage(),
         '/kurir': (context) => const KurirDashboard(),
@@ -151,16 +157,21 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     
+    // Initialize deep link handler
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      DeepLinkHandler().initDeepLinks(context);
+    });
+    
     // Tambah logging untuk debug
     final user = AuthService().currentUser;
-    print('🔐 User auth state:');
+    print('?? User auth state:');
     print('   UID: ${user?.uid}');
     print('   Email: ${user?.email}');
     print('   Is authenticated: ${user != null}');
     
     final uid = user?.uid;
     if (uid != null) {
-      print('📡 Starting cart stream for UID: $uid');
+      print('?? Starting cart stream for UID: $uid');
       
       // Tambah delay kecil untuk memastikan auth sudah ready
       Future.delayed(const Duration(milliseconds: 500), () {
@@ -168,7 +179,7 @@ class _MyAppState extends State<MyApp> {
         
         _cartSub = _repo.cartStream(uid).listen(
           (items) {
-            print('✅ Cart stream data received: ${items.length} items');
+            print('? Cart stream data received: ${items.length} items');
             for (final item in items) {
               print('   - ${item.item.name} x${item.qty}');
             }
@@ -176,13 +187,13 @@ class _MyAppState extends State<MyApp> {
             setState(() => _cart = items);
           },
           onError: (error) {
-            print('❌ Cart stream error: $error');
+            print('? Cart stream error: $error');
             print('   Error type: ${error.runtimeType}');
           },
         );
       });
     } else {
-      print('⚠️ No user authenticated, cart stream not started');
+      print('?? No user authenticated, cart stream not started');
     }
   }
 
@@ -203,13 +214,13 @@ class _MyAppState extends State<MyApp> {
       return;
     }
     
-    print('🛒 Adding to cart:');
+    print('?? Adding to cart:');
     print('   User ID: $uid');
     print('   Item: ${item.name} (${item.id})');
     
     try {
       await _repo.increment(uid, item, 1);
-      print('✅ Cart updated successfully');
+      print('? Cart updated successfully');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -221,7 +232,7 @@ class _MyAppState extends State<MyApp> {
         );
       }
     } catch (e) {
-      print('❌ Error adding to cart: $e');
+      print('? Error adding to cart: $e');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -309,17 +320,20 @@ class _MyAppState extends State<MyApp> {
         onIncrease: _inc,
         onDecrease: _dec,
         onRemove: _remove,
-        onCheckout: (total, address, payment) async {
+        onCheckout: (total, address, payment, {shippingFee, deliveryDistance, coordinates}) async {
           final uid = AuthService().currentUser?.uid;
-          if (uid == null) return;
+          if (uid == null) return {};
           
           // Place order dan dapatkan order ID & code
-          await _repo.placeOrder(
+          return await _repo.placeOrder(
             uid,
             _cart,
             total,
             shippingAddress: address,
             paymentMethod: payment,
+            shippingFee: shippingFee,
+            deliveryDistance: deliveryDistance,
+            coordinates: coordinates,
           );
           
           // Dialog dan navigasi sekarang ditangani di CheckoutPage

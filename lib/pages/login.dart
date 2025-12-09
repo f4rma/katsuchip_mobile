@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+﻿import 'package:flutter/material.dart';
 import '../service/auth_service.dart';
 import '../utils/error_handler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -104,8 +103,14 @@ class _LoginPageState extends State<LoginPage> {
                       if (uid != null) {
                         try {
                           final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-                          final role = (doc.data()?['role'] as String?) ?? 'user';
-                          if (role == 'admin') {
+                          final data = doc.data();
+                          final role = (data?['role'] as String?) ?? 'user';
+                          final mustChangePassword = (data?['mustChangePassword'] as bool?) ?? false;
+                          
+                          // Jika kurir wajib ganti password, redirect ke halaman ganti password
+                          if (mustChangePassword && role == 'kurir') {
+                            route = '/first-login-change-password';
+                          } else if (role == 'admin') {
                             route = '/admin';
                           } else if (role == 'kurir') {
                             route = '/kurir';
@@ -224,52 +229,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
 
-              const SizedBox(height: 24),
-              
-              // Fallback button untuk registrasi kurir dengan token
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.shade200),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.local_shipping, color: Colors.orange.shade700, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Ingin jadi bagian Katsuchip?',
-                          style: TextStyle(
-                            color: Colors.orange.shade900,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFFFF7A00),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      ),
-                      icon: const Icon(Icons.vpn_key, size: 18),
-                      label: const Text(
-                        'Masukkan Token Invitation',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                      onPressed: () => Navigator.of(context).pushNamed('/register-kurir'),
-                    ),
-                  ],
-                ),
-              ),
+              const SizedBox(height: 24),                          
 
             ],
           ),

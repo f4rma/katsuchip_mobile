@@ -1,14 +1,8 @@
-/// API Keys Configuration - EXAMPLE TEMPLATE
-/// Copy file ini menjadi api_keys.dart dan isi dengan API keys yang sebenarnya
-/// File api_keys.dart sudah di-gitignore untuk keamanan
-
 class ApiKeys {
   // Midtrans Configuration
-  // Dapatkan dari: https://dashboard.midtrans.com/settings/access-keys
-  static const String midtransClientKey = 'YOUR_CLIENT_KEY_HERE'; // Contoh: SB-Mid-client-xxxxxxxxxxxxx
-  static const String midtransServerKey = 'YOUR_SERVER_KEY_HERE'; // Contoh: SB-Mid-server-xxxxxxxxxxxxx
-  static const bool midtransIsProduction = false; // false untuk Sandbox, true untuk Production
+  // Get your keys from: https://dashboard.midtrans.com/settings/config_info
+  static const String midtransClientKey = 'YOUR_MIDTRANS_CLIENT_KEY';
+  static const String midtransServerKey = 'YOUR_MIDTRANS_SERVER_KEY';
+  static const bool midtransIsProduction = false; // false = Sandbox, true = Production
   
-  // TODO: Tambah API keys lain di sini jika perlu
-  // static const String googleMapsApiKey = 'YOUR_GOOGLE_MAPS_KEY';
 }

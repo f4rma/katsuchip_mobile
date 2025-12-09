@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'admin_appbar_actions.dart';
 import 'admin_order_detail.dart';
@@ -41,7 +41,7 @@ class _StatusTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = const [
       ['all', 'Semua'],
-      ['pending', 'Menunggu'],
+      ['menunggu', 'Menunggu'],
       ['processing', 'Diproses'],
       ['delivering', 'Diantar'],
       ['delivered', 'Selesai'],
@@ -160,6 +160,8 @@ class _OrderTile extends StatelessWidget {
     final uid = data['userId'] as String? ?? '-';
     final total = (data['total'] ?? 0) as num;
     final status = data['status'] as String? ?? 'pending';
+    final paymentStatus = data['paymentStatus'] as String? ?? 'unpaid';
+    final paymentMethod = data['paymentMethod'] as String? ?? '-';
     final kurirId = data['kurirId'] as String?;
     final kurirName = data['kurirName'] as String?;
     final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
@@ -183,11 +185,25 @@ class _OrderTile extends StatelessWidget {
     List<Widget> actions() {
       switch (status) {
         case 'pending':
+          // Pending = belum bayar, admin tidak perlu klik apa-apa
           return [
-            btn('Konfirmasi', () => _updateStatus(doc, 'confirmed', context)),
-            btn('Batalkan', () => _updateStatus(doc, 'cancelled', context), color: Colors.grey),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Menunggu pembayaran...',
+                style: TextStyle(fontSize: 12, color: Colors.orange, fontStyle: FontStyle.italic),
+              ),
+            ),
           ];
-        case 'confirmed':
+        case 'menunggu':
+          // Menunggu = sudah bayar (transfer bank), bisa diproses
+          return [btn('Proses', () => _updateStatus(doc, 'processing', context))];
+        case 'paid':
+          // Backward compatibility untuk pesanan lama dengan status paid
           return [btn('Proses', () => _updateStatus(doc, 'processing', context))];
         case 'processing':
           return [btn('Antarkan', () => _updateToDelivering(doc, context))];
@@ -262,11 +278,17 @@ class _OrderTile extends StatelessWidget {
         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Expanded(child: Text('#$code · UID: $uid', style: const TextStyle(fontWeight: FontWeight.w700))),
+          Expanded(child: Text('#$code • UID: $uid', style: const TextStyle(fontWeight: FontWeight.w700))),
           _StatusPill(status: status),
         ]),
         const SizedBox(height: 6),
-        Text('Total: ${_rupiah(total)} · $when', style: const TextStyle(color: Colors.black54)),
+        Row(
+          children: [
+            Expanded(
+              child: Text('Total: ${_rupiah(total)} • $when', style: const TextStyle(color: Colors.black54)),
+            ),
+          ],
+        ),
         const SizedBox(height: 10),
         Wrap(spacing: 8, runSpacing: 8, children: actions()),
         ]),
@@ -327,7 +349,15 @@ class _StatusPill extends StatelessWidget {
     String label;
     switch (status) {
       case 'pending': 
-        c = Colors.grey; 
+        c = Colors.orange; 
+        label = 'Pending';
+        break;
+      case 'menunggu':
+        c = Colors.blue;
+        label = 'Menunggu';
+        break;
+      case 'paid':
+        c = Colors.blue;
         label = 'Menunggu';
         break;
       case 'processing': 
@@ -354,6 +384,132 @@ class _StatusPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(color: c.withValues(alpha: .15), borderRadius: BorderRadius.circular(14)),
       child: Text(label, style: TextStyle(color: c, fontWeight: FontWeight.w700, fontSize: 12)),
+    );
+  }
+}
+
+class _PaymentMethodBadge extends StatelessWidget {
+  final String method;
+  const _PaymentMethodBadge({required this.method});
+
+  @override
+  Widget build(BuildContext context) {
+    String label;
+    IconData icon;
+    Color color;
+    
+    switch (method.toLowerCase()) {
+      case 'qris':
+        label = 'QRIS';
+        icon = Icons.qr_code;
+        color = Colors.purple;
+        break;
+      case 'bri':
+        label = 'BRI';
+        icon = Icons.account_balance;
+        color = Colors.blue;
+        break;
+      case 'mandiri':
+        label = 'Mandiri';
+        icon = Icons.account_balance;
+        color = Colors.orange;
+        break;
+      case 'nagari':
+        label = 'Nagari';
+        icon = Icons.account_balance;
+        color = Colors.green;
+        break;
+      default:
+        label = method.toUpperCase();
+        icon = Icons.payment;
+        color = Colors.grey;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: .3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentStatusBadge extends StatelessWidget {
+  final String paymentStatus;
+  const _PaymentStatusBadge({required this.paymentStatus});
+
+  @override
+  Widget build(BuildContext context) {
+    Color color;
+    String label;
+    IconData icon;
+    
+    switch (paymentStatus.toLowerCase()) {
+      case 'paid':
+        color = Colors.green;
+        label = 'Sudah Dibayar';
+        icon = Icons.check_circle;
+        break;
+      case 'unpaid':
+        color = Colors.red;
+        label = 'Belum Dibayar';
+        icon = Icons.error_outline;
+        break;
+      case 'pending':
+        color = Colors.orange;
+        label = 'Pending';
+        icon = Icons.access_time;
+        break;
+      case 'failed':
+        color = Colors.red;
+        label = 'Gagal';
+        icon = Icons.cancel;
+        break;
+      default:
+        color = Colors.grey;
+        label = paymentStatus;
+        icon = Icons.help_outline;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: .3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

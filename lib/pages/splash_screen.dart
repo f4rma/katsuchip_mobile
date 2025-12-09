@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import '../service/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -39,8 +39,27 @@ class _SplashscreenState extends State<Splashscreen> with SingleTickerProviderSt
           // cek role di users/{uid}
           try {
             final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-            final role = (doc.data()?['role'] as String?) ?? 'user';
+            final data = doc.data();
+            final role = (data?['role'] as String?) ?? 'user';
+            final mustChangePassword = (data?['mustChangePassword'] as bool?) ?? false;
+            
             if (!mounted) return;
+            
+            // HANYA kurir yang wajib ganti password
+            // Jika user/admin punya mustChangePassword=true, hapus field tersebut (auto-fix)
+            if (mustChangePassword && role != 'kurir') {
+              await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                'mustChangePassword': false,
+              });
+            }
+            
+            // Jika mustChangePassword = true DAN role = kurir, redirect ke ubah password
+            if (mustChangePassword && role == 'kurir') {
+              Navigator.of(context).pushReplacementNamed('/first-login-change-password');
+              return;
+            }
+            
+            // Route normal berdasarkan role
             String route = '/main';
             if (role == 'admin') {
               route = '/admin';

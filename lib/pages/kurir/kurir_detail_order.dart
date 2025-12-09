@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../service/auth_service.dart';
@@ -83,7 +83,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
       final uid = AuthService().currentUser?.uid;
       if (uid == null) throw 'User tidak terautentikasi';
       
-      print('🚀 UI: Memulai pengiriman');
+      print('?? UI: Memulai pengiriman');
       print('  - Order ID: ${pesanan.orderId}');
       print('  - Customer ID: ${pesanan.userId}');
       print('  - Courier ID: $uid');
@@ -97,7 +97,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
         orderCode: pesanan.code,
       );
       
-      print('✅ UI: Pengiriman berhasil dimulai!');
+      print('? UI: Pengiriman berhasil dimulai!');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -108,7 +108,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
         );
       }
     } catch (e) {
-      print('❌ UI Error _mulaiPengiriman: $e');
+      print('? UI Error _mulaiPengiriman: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -156,7 +156,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
       final uid = AuthService().currentUser?.uid;
       if (uid == null) throw 'User tidak terautentikasi';
       
-      print('📦 UI: Menandai pesanan terkirim');
+      print('?? UI: Menandai pesanan terkirim');
       print('  - Order ID: ${pesanan.orderId}');
       print('  - Customer ID: ${pesanan.userId}');
       print('  - Courier ID: $uid');
@@ -170,19 +170,19 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
         orderCode: pesanan.code,
       );
       
-      print('✅ UI: Pesanan berhasil ditandai terkirim!');
+      print('Pesanan berhasil dikirim!');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Pesanan ditandai sebagai terkirim!'),
+            content: Text('Pesanan berhasil dikirim!'),
             backgroundColor: Colors.green,
           ),
         );
         Navigator.of(context).pop();
       }
     } catch (e) {
-      print('❌ UI Error _selesaiPengiriman: $e');
+      print('? UI Error _selesaiPengiriman: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -200,7 +200,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
 
   Future<void> _bukaGoogleMaps(CourierOrder pesanan) async {
     // Helper untuk validasi koordinat
-    bool _isValid(double? lat, double? lng) {
+    bool isValid(double? lat, double? lng) {
       if (lat == null || lng == null) return false;
       if (lat == 0 && lng == 0) return false;
       if (lat < -90 || lat > 90) return false;
@@ -209,7 +209,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
     }
 
     // Deteksi kemungkinan koordinat tertukar (lat > 90 dan lon dalam rentang lat)
-    Map<String, double> _maybeSwap(double lat, double lng) {
+    Map<String, double> maybeSwap(double lat, double lng) {
       if (lat.abs() > 90 && lng.abs() <= 90) {
         // Swap
         return {'lat': lng, 'lng': lat};
@@ -221,8 +221,8 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
     final lng = pesanan.longitude;
 
     // Cek apakah koordinat valid (bukan 0,0 dan dalam rentang)
-    if (!_isValid(lat, lng)) {
-      print('⚠ Koordinat tidak valid: lat=$lat, lng=$lng');
+    if (!isValid(lat, lng)) {
+      print('? Koordinat tidak valid: lat=$lat, lng=$lng');
       
       // Coba geocode ulang dari alamat
       if (mounted) {
@@ -251,7 +251,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
           final newLat = coordinates['latitude']!;
           final newLng = coordinates['longitude']!;
           
-          print('✓ Geocoding ulang berhasil: $newLat, $newLng');
+          print('? Geocoding ulang berhasil: $newLat, $newLng');
           
           // Buka Google Maps dengan koordinat baru
           final url = Uri.parse(
@@ -274,15 +274,15 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
               'longitude': newLng,
             });
             
-            print('✓ Koordinat disimpan ke Firestore');
+            print('? Koordinat disimpan ke Firestore');
           } catch (e) {
-            print('⚠ Gagal update koordinat di Firestore: $e');
+            print('? Gagal update koordinat di Firestore: $e');
             // Tidak menghentikan proses, Maps tetap dibuka
           }
           
           return;
         } else {
-          print('✗ Geocoding ulang gagal - alamat tidak ditemukan');
+          print('? Geocoding ulang gagal - alamat tidak ditemukan');
           
           if (mounted) {
             // Fallback: Buka Google Maps dengan alamat text
@@ -324,7 +324,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
           return;
         }
       } catch (e) {
-        print('❌ Error saat geocoding: $e');
+        print('? Error saat geocoding: $e');
         
         if (mounted) {
           // Close loading dialog if still open
@@ -333,7 +333,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
         
         if (mounted) {
           // Fallback langsung: buka dengan alamat text tanpa konfirmasi
-          print('→ Fallback: membuka Maps dengan pencarian alamat text');
+          print('? Fallback: membuka Maps dengan pencarian alamat text');
           
           final encodedAddress = Uri.encodeComponent(pesanan.address);
           final url = Uri.parse(
@@ -355,7 +355,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
     }
 
     // Koordinat valid - kemungkinan perlu swap
-    final adjusted = _maybeSwap(lat!, lng!);
+    final adjusted = maybeSwap(lat!, lng!);
     final finalLat = adjusted['lat']!;
     final finalLng = adjusted['lng']!;
     final directionsUrl = Uri.parse(
@@ -367,7 +367,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
       if (await canLaunchUrl(directionsUrl)) {
         await launchUrl(directionsUrl, mode: LaunchMode.externalApplication);
       } else {
-        print('⚠ Directions gagal, mencoba search URL');
+        print('? Directions gagal, mencoba search URL');
         if (await canLaunchUrl(searchUrl)) {
           await launchUrl(searchUrl, mode: LaunchMode.externalApplication);
         } else {
@@ -421,7 +421,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
       body: StreamBuilder<CourierOrder?>(
         stream: _orderStream, // Gunakan cached stream, BUKAN panggil getOrderStream lagi
         builder: (context, snapshot) {
-          print('📱 StreamBuilder state: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, data: ${snapshot.data?.code}');
+          print('?? StreamBuilder state: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, data: ${snapshot.data?.code}');
           
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -793,7 +793,7 @@ class _BariItem extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${_rupiah(harga)} × $qty',
+                  '${_rupiah(harga)} • $qty',
                   style: const TextStyle(
                     fontSize: 12,
                     color: Colors.black54,

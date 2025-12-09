@@ -22,6 +22,15 @@
       "collectionGroup": "orders",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
+        { "fieldPath": "courierId", "order": "ASCENDING" },
+        { "fieldPath": "deliveryStatus", "order": "ASCENDING" },
+        { "fieldPath": "completedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
         {
           "fieldPath": "courierId",
           "order": "ASCENDING"

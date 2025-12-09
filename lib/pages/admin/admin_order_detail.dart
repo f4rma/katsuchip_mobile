@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../service/notification_service.dart';
 import '../../service/auth_service.dart';
@@ -146,7 +146,7 @@ class _ItemCard extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            Text('${_rupiah(price)} × $qty', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+            Text('${_rupiah(price)} • $qty', style: const TextStyle(fontSize: 12, color: Colors.black54)),
           ]),
         ),
         Text(_rupiah(subtotal), style: const TextStyle(fontWeight: FontWeight.w700)),

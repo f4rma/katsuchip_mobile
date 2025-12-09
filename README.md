@@ -62,16 +62,6 @@ flutter pub get
 flutter run
 ```
 
----
-
-##  Documentation
-
-- **[API Keys Setup](API_KEYS_SETUP.md)** - Cara setup Midtrans API keys
-- **[Midtrans Integration](MIDTRANS_INTEGRATION.md)** - Panduan lengkap payment gateway
-- **[Courier System](COURIER_SYSTEM.md)** - Dokumentasi sistem kurir
-
----
-
 ##  Tech Stack
 
 - **Framework**: Flutter 3.9+
@@ -80,12 +70,6 @@ flutter run
 - **State Management**: StatefulWidget
 - **Maps**: Google Maps (via url_launcher)
 - **Authentication**: Firebase Auth + Google Sign-In
-
----
-
-## 📱 Screenshots
-
-_(Coming soon)_
 
 ---
 

@@ -1,6 +1,5 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:midtrans_sdk/midtrans_sdk.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../config/api_keys.dart';
 
@@ -9,22 +8,6 @@ class MidtransService {
   static String get _clientKey => ApiKeys.midtransClientKey;
   static String get _serverKey => ApiKeys.midtransServerKey;
   static bool get _isProduction => ApiKeys.midtransIsProduction;
-
-  late MidtransSDK _midtransSDK;
-
-  MidtransService() {
-    _initSDK();
-  }
-
-  void _initSDK() {
-    _midtransSDK = MidtransSDK();
-    MidtransSDK.init(
-      config: MidtransConfig(
-        clientKey: _clientKey,
-        merchantBaseUrl: '', // Optional
-      ),
-    );
-  }
 
   /// Generate Snap Token dari server Midtrans
   /// PERHATIAN: Untuk production, generate token di backend/Cloud Function
@@ -94,25 +77,8 @@ class MidtransService {
     }
   }
 
-  /// Launch Midtrans payment UI
-  Future<Map<String, dynamic>?> startPayment({
-    required String snapToken,
-    required String orderId,
-  }) async {
-    try {
-      await _midtransSDK.startPaymentUiFlow(token: snapToken);
-      
-      // Get transaction status after payment UI closed
-      final status = await _checkTransactionStatus(orderId);
-      return status;
-    } catch (e) {
-      print('Error starting payment: $e');
-      return null;
-    }
-  }
-
   /// Check transaction status from Midtrans API
-  Future<Map<String, dynamic>?> _checkTransactionStatus(String orderId) async {
+  Future<Map<String, dynamic>?> checkTransactionStatus(String orderId) async {
     try {
       final url = Uri.parse(
         _isProduction
@@ -199,5 +165,116 @@ class MidtransService {
         'quantity': item['qty'] as int,
       };
     }).toList();
+  }
+
+  /// Generate QRIS QR Code URL untuk pembayaran QRIS
+  /// Return Map dengan qr_code_url dan expiry_time
+  Future<Map<String, dynamic>?> generateQRIS({
+    required String orderId,
+    required int grossAmount,
+    required String customerName,
+    required String customerEmail,
+    required String customerPhone,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    try {
+      final url = Uri.parse(
+        _isProduction
+            ? 'https://api.midtrans.com/v2/charge'
+            : 'https://api.sandbox.midtrans.com/v2/charge',
+      );
+
+      // Encode Server Key ke Base64 untuk Authorization header
+      final auth = base64Encode(utf8.encode('$_serverKey:'));
+
+      final body = {
+        'payment_type': 'qris',
+        'transaction_details': {
+          'order_id': orderId,
+          'gross_amount': grossAmount,
+        },
+        'customer_details': {
+          'first_name': customerName,
+          'email': customerEmail,
+          'phone': customerPhone,
+        },
+        'item_details': items,
+        'qris': {
+          'acquirer': 'gopay', // Specify acquirer for better QR code generation
+        },
+      };
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic $auth',
+        },
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        
+        // Extract QRIS data with safer null handling
+        String? qrCodeUrl;
+        String? qrString;
+        
+        // Try to get QR string directly from response
+        if (data.containsKey('qr_string')) {
+          qrString = data['qr_string'] as String?;
+        }
+        
+        // If no qr_string, try to get from actions
+        final actions = data['actions'];
+        if (actions != null && actions is List) {
+          try {
+            final qrAction = actions.firstWhere(
+              (action) => action != null && action['name'] == 'generate-qr-code',
+              orElse: () => null,
+            );
+            if (qrAction != null) {
+              qrCodeUrl = qrAction['url'] as String?;
+              
+              // If URL exists, fetch the actual QR string
+              if (qrCodeUrl != null && qrCodeUrl.isNotEmpty) {
+                try {
+                  final qrResponse = await http.get(Uri.parse(qrCodeUrl));
+                  if (qrResponse.statusCode == 200) {
+                    // The response body should be the QR code image
+                    // Store the URL for display
+                    qrCodeUrl = qrAction['url'] as String?;
+                  }
+                } catch (e) {
+                  print('Error fetching QR code: $e');
+                }
+              }
+            }
+          } catch (e) {
+            print('Error extracting QR code URL: $e');
+          }
+        }
+
+        return {
+          'status': data['transaction_status'],
+          'order_id': data['order_id'],
+          'gross_amount': data['gross_amount'],
+          'qr_code_url': qrCodeUrl,
+          'qr_string': qrString, // QRIS string for direct QR generation
+          'transaction_id': data['transaction_id'],
+          'merchant_id': data['merchant_id'],
+          'acquirer': data['acquirer'],
+          'expiry_time': data['expiry_time'],
+        };
+      } else {
+        print('Error generating QRIS: ${response.statusCode}');
+        print('Response: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('Exception generating QRIS: $e');
+      return null;
+    }
   }
 }

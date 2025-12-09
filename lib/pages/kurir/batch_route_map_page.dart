@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -28,27 +28,27 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
   bool _isLoadingRoute = true;
   LatLng? _currentLocation;
   
-  // Check apakah semua pesanan sudah on_delivery (bukan waiting_pickup)
+  // Check apakah semua pesanan sudah on_delivery
   bool get _isActiveDelivery => widget.orders.every(
     (order) => order.deliveryStatus == 'on_delivery'
   );
   
-  // Default store location (ganti dengan koordinat toko sebenarnya)
+  // lokasi toko katsuchip
   static const LatLng _storeLocation = LatLng(-0.9059128990717297, 100.36016218288833);
 
   @override
   void initState() {
     super.initState();
-    print('🗺️ BatchRouteMapPage initialized with ${widget.orders.length} orders');
+    print(' BatchRouteMapPage initialized with ${widget.orders.length} orders');
     
     // Delayed initialization untuk kasih waktu widget tree ready
     Future.microtask(() => _initializeMap());
   }
 
   Future<void> _initializeMap() async {
-    print('🚀 Initializing map...');
+    print('Initializing map...');
     
-    // Get current location
+    // ambil lokasi sekarang
     try {
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
@@ -56,16 +56,16 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
       );
       if (mounted) {
         _currentLocation = LatLng(position.latitude, position.longitude);
-        print('📍 Got current location: $_currentLocation');
+        print('Got current location: $_currentLocation');
       }
     } catch (e) {
-      print('⚠️ Cannot get current location: $e');
+      print('Cannot get current location: $e');
       _currentLocation = _storeLocation; // Fallback ke lokasi toko
     }
 
-    print('📦 Loading route and markers...');
+    print('Loading route and markers...');
     await _loadRouteAndMarkers();
-    print('✅ Map initialization complete');
+    print('Map initialization complete');
   }
 
   Future<void> _loadRouteAndMarkers() async {
@@ -73,21 +73,21 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
 
     final markers = <Marker>{};
     
-    // Filter orders dengan koordinat valid
+    // filter orders
     final validOrders = widget.orders.where((o) {
       final lat = o.latitude;
       final lng = o.longitude;
       final isValid = lat != null && lng != null && lat != 0 && lng != 0;
       if (!isValid) {
-        print('⚠️ Invalid coordinates for ${o.recipientName}: ($lat, $lng)');
+        print('?? Invalid coordinates for ${o.recipientName}: ($lat, $lng)');
       }
       return isValid;
     }).toList();
 
-    print('📌 Valid orders: ${validOrders.length} / ${widget.orders.length}');
+    print('?? Valid orders: ${validOrders.length} / ${widget.orders.length}');
 
     if (validOrders.isEmpty) {
-      print('❌ No valid coordinates found!');
+      print('? No valid coordinates found!');
       if (mounted) {
         setState(() {
           _isLoadingRoute = false;
@@ -97,9 +97,9 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
       return;
     }
 
-    // Marker untuk lokasi saat ini (start point)
+    // Marker untuk lokasi start point si kurir
     final startLocation = _currentLocation ?? _storeLocation;
-    print('🚩 Start marker at: $startLocation');
+    print('?? Start marker at: $startLocation');
     
     markers.add(Marker(
       markerId: const MarkerId('current_location'),
@@ -117,7 +117,7 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
       final lat = order.latitude!;
       final lng = order.longitude!;
       
-      print('📍 Marker ${i + 1}: ${order.recipientName} at ($lat, $lng)');
+      print('?? Marker ${i + 1}: ${order.recipientName} at ($lat, $lng)');
 
       markers.add(Marker(
         markerId: MarkerId(order.orderId),
@@ -130,7 +130,7 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
       ));
     }
 
-    print('✅ Created ${markers.length} markers');
+    print('? Created ${markers.length} markers');
 
     if (mounted) {
       setState(() {
@@ -139,12 +139,12 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
     }
 
     // Fetch polyline dari Directions API
-    print('🛣️ Fetching route polyline...');
+    print('??? Fetching route polyline...');
     await _fetchRoutePolyline(validOrders);
 
     // Zoom ke bounds yang mencakup semua marker
     if (_mapController != null) {
-      print('📏 Fitting bounds...');
+      print('?? Fitting bounds...');
       _fitBounds();
     }
 
@@ -152,7 +152,7 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
       setState(() => _isLoadingRoute = false);
     }
     
-    print('✅ Route loading complete');
+    print('? Route loading complete');
   }
 
   Future<void> _fetchRoutePolyline(List<CourierOrder> validOrders) async {
@@ -170,7 +170,7 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
         .map((o) => LatLng(o.latitude!, o.longitude!))
         .toList();
 
-    print('🗺️ Fetching directions:');
+    print('??? Fetching directions:');
     print('   Origin: $origin');
     print('   Waypoints: ${waypoints.length}');
     print('   Destination: $destination');
@@ -186,14 +186,14 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
 
     // Fallback: jika API gagal, buat garis lurus
     if (routePoints == null) {
-      print('⚠️ Directions API failed, using straight lines');
+      print('?? Directions API failed, using straight lines');
       routePoints = DirectionsService.createStraightLines(
         origin: origin,
         destination: destination,
         waypoints: waypoints,
       );
     } else {
-      print('✅ Got ${routePoints.length} polyline points from API');
+      print('? Got ${routePoints.length} polyline points from API');
     }
 
     // Buat polyline
@@ -209,7 +209,7 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
       setState(() {
         _polylines = {polyline};
       });
-      print('✅ Polyline added to map (${routePoints.length} points)');
+      print('? Polyline added to map (${routePoints.length} points)');
     }
   }
 
@@ -223,7 +223,7 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
 
   void _fitBounds() {
     if (_markers.isEmpty || _mapController == null) {
-      print('❌ Cannot fit bounds: markers=${_markers.length}, controller=${_mapController != null}');
+      print('? Cannot fit bounds: markers=${_markers.length}, controller=${_mapController != null}');
       return;
     }
 
@@ -246,16 +246,16 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
       northeast: LatLng(maxLat, maxLng),
     );
 
-    print('📍 Bounds: SW($minLat,$minLng) NE($maxLat,$maxLng)');
+    print('?? Bounds: SW($minLat,$minLng) NE($maxLat,$maxLng)');
 
     // Try immediate animation first
     try {
       _mapController!.animateCamera(
         CameraUpdate.newLatLngBounds(bounds, 80), // 80px padding
       );
-      print('✅ Camera animation success');
+      print('? Camera animation success');
     } catch (e) {
-      print('⚠️ Camera animation error: $e');
+      print('?? Camera animation error: $e');
       // Fallback: move to center
       try {
         final center = LatLng(
@@ -265,9 +265,9 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
         _mapController!.animateCamera(
           CameraUpdate.newLatLngZoom(center, 14),
         );
-        print('✅ Fallback camera move success');
+        print('? Fallback camera move success');
       } catch (e2) {
-        print('❌ Fallback camera move failed: $e2');
+        print('? Fallback camera move failed: $e2');
       }
     }
   }
@@ -299,13 +299,13 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
             onMapCreated: (controller) async {
               if (!mounted) return;
               
-              print('🗺️ Map created');
+              print('??? Map created');
               _mapController = controller;
               
               // Wait a bit then fit bounds
               await Future.delayed(const Duration(milliseconds: 1000));
               if (mounted && _markers.isNotEmpty) {
-                print('🗺️ Fitting bounds to ${_markers.length} markers');
+                print('??? Fitting bounds to ${_markers.length} markers');
                 _fitBounds();
               }
             },
@@ -532,7 +532,7 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
         '&travelmode=driving'
       );
 
-      print('🗺️ Opening Google Maps: $url');
+      print('??? Opening Google Maps: $url');
 
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -546,7 +546,7 @@ class _BatchRouteMapPageState extends State<BatchRouteMapPage> {
         }
       }
     } catch (e) {
-      print('❌ Error opening Google Maps: $e');
+      print('? Error opening Google Maps: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Gagal membuka Google Maps: $e')),
