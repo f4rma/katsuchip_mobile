@@ -52,6 +52,7 @@ lib/firebase_options.dart
 *.key
 *.keystore
 *.jks
+android/key.properties
 
 # API keys and sensitive configuration files
 lib/config/api_keys.dart

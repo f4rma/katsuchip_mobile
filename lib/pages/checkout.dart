@@ -1148,6 +1148,7 @@ class _RowSpaced extends StatelessWidget {
     this.left,
     this.right, {
     this.emphasize = false,
+    this.rightColor,
   });
 
   @override

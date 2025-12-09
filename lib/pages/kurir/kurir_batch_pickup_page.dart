@@ -848,6 +848,8 @@ class _BatchCard extends StatefulWidget {
     required this.batch,
     required this.onOpenMaps,
     required this.onPreviewRoute,
+    this.onPickup,
+    this.isActiveMode = false,
   });
 
   @override
