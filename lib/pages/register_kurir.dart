@@ -139,7 +139,7 @@ class _RegisterKurirPageState extends State<RegisterKurirPage> {
     const orange = Color(0xFFFF7A00);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF7ED),
+      backgroundColor: const Color(0xFFFFF4DE),
       appBar: AppBar(
         backgroundColor: orange,
         foregroundColor: Colors.white,

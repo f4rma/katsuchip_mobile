@@ -698,7 +698,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                     }
                     
                     // Tampilkan halaman QRIS Payment
-                    await Navigator.push(
+                    Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => QRISPaymentPage(

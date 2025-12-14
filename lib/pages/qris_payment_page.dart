@@ -1,5 +1,6 @@
 ﻿import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
@@ -487,7 +488,11 @@ class _QRISPaymentPageState extends State<QRISPaymentPage> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  // Pop 2x: tutup QRIS page dan checkout page
+                  Navigator.pop(context);
+                  Navigator.pop(context);
+                },
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.grey),
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -523,11 +528,32 @@ class _QRISPaymentPageState extends State<QRISPaymentPage> {
         ),
       );
 
-      // Download image
-      final response = await http.get(Uri.parse(qrCodeUrl));
+      // Generate QR Code untuk webhook URL (bukan Midtrans URL)
+      final webhookUrl = 'https://us-central1-katsuchip-65298.cloudfunctions.net/paymentSuccess?order_id=${widget.orderId}&amount=${widget.totalAmount}';
       
-      if (response.statusCode != 200) {
-        throw Exception('Failed to download QR Code');
+      // Create QR image using qr_flutter
+      final qrValidationResult = QrValidator.validate(
+        data: webhookUrl,
+        version: QrVersions.auto,
+        errorCorrectionLevel: QrErrorCorrectLevel.L,
+      );
+      
+      if (qrValidationResult.status != QrValidationStatus.valid) {
+        throw Exception('Invalid QR data');
+      }
+      
+      final qrCode = qrValidationResult.qrCode!;
+      final painter = QrPainter.withQr(
+        qr: qrCode,
+        color: const Color(0xFF000000),
+        emptyColor: const Color(0xFFFFFFFF),
+        gapless: true,
+      );
+      
+      // Convert to image
+      final picData = await painter.toImageData(500, format: ui.ImageByteFormat.png);
+      if (picData == null) {
+        throw Exception('Failed to generate QR image');
       }
 
       // Get downloads directory
@@ -548,10 +574,10 @@ class _QRISPaymentPageState extends State<QRISPaymentPage> {
       }
 
       // Save file
-      final fileName = 'QR_${widget.orderId}_${DateTime.now().millisecondsSinceEpoch}.png';
+      final fileName = 'KatsuChip_QR_${widget.orderId}.png';
       final filePath = '${directory.path}/$fileName';
       final file = File(filePath);
-      await file.writeAsBytes(response.bodyBytes);
+      await file.writeAsBytes(picData.buffer.asUint8List());
 
       // Close loading
       if (!mounted) return;
@@ -559,15 +585,10 @@ class _QRISPaymentPageState extends State<QRISPaymentPage> {
 
       // Show success
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('QR Code disimpan di: ${directory.path}'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 4),
-          action: SnackBarAction(
-            label: 'OK',
-            textColor: Colors.white,
-            onPressed: () {},
-          ),
+        const SnackBar(
+          content: Text('QR Code berhasil diunduh'),
+          backgroundColor: Color(0xFFFF7A00),
+          duration: Duration(seconds: 2),
         ),
       );
     } catch (e) {

@@ -41,9 +41,12 @@ class ProfilePage extends StatelessWidget {
           builder: (context, snap) {
             final data = snap.data?.data() ?? {};
             final email = user.email ?? '-';
-            final name = (user.displayName?.trim().isNotEmpty ?? false)
-                ? user.displayName!
-                : 'Pengguna';
+            // Ambil nama dari Firestore agar otomatis ter-update setelah edit
+            final name = (data['name'] as String?)?.trim().isNotEmpty ?? false
+                ? data['name'] as String
+                : (user.displayName?.trim().isNotEmpty ?? false)
+                    ? user.displayName!
+                    : 'Pengguna';
             final phone = (data['phone'] ?? '') as String;
 
             return ListView(
@@ -290,9 +293,21 @@ class ProfilePage extends StatelessWidget {
         final name = nameC.text.trim();
         final phoneFormatted = phoneC.text.trim();
         final phone = PhoneNumberFormatter.cleanPhoneNumber(phoneFormatted);
+        
+        // Update display name di Firebase Auth
         if (name.isNotEmpty) {
           await user.updateDisplayName(name);
         }
+        
+        // Update data di Firestore (simpan nama dan phone)
+        final updateData = <String, dynamic>{
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+        
+        if (name.isNotEmpty) {
+          updateData['name'] = name;
+        }
+        
         if (phone.isNotEmpty) {
           // validasi nomor telepon Indonesia
           final isValid = RegExp(r'^\+62\d{9,13}$').hasMatch(phone);
@@ -306,10 +321,12 @@ class ProfilePage extends StatelessWidget {
             }
             return;
           }
-          await userDoc.set({
-            'phone': phone,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          updateData['phone'] = phone;
+        }
+        
+        // Simpan ke Firestore jika ada data yang perlu di-update
+        if (updateData.length > 1) {
+          await userDoc.set(updateData, SetOptions(merge: true));
         }
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -687,7 +704,7 @@ class HelpFAQPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF7ED),
+      backgroundColor: const Color(0xFFFFF4DE),
       appBar: AppBar(
         backgroundColor: const Color(0xFFFF7A00),
         foregroundColor: Colors.white,
@@ -968,7 +985,7 @@ class TermsConditionsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF7ED),
+      backgroundColor: const Color(0xFFFFF4DE),
       appBar: AppBar(
         backgroundColor: const Color(0xFFFF7A00),
         foregroundColor: Colors.white,

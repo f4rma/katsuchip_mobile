@@ -185,22 +185,21 @@ class _DashboardStats {
           .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startToday))
           .get();
 
-      // Query untuk pendapatan 30 hari terakhir
+      // Query untuk pendapatan 30 hari terakhir (hanya yang sudah dibayar)
       final orders30 = await db.collection('orders')
           .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(thirtyDaysAgo))
           .get();
 
       final countToday = ordersToday.size;
       
-      // Hitung total pendapatan dari 30 hari (hanya pesanan yang sudah selesai/paid)
+      // Hitung total pendapatan dari 30 hari (hanya pesanan yang sudah dibayar/selesai)
       int totalRevenue = 0;
       for (final doc in orders30.docs) {
         final data = doc.data();
-        final status = data['status'] as String?;
-        // Hanya hitung pesanan yang sudah dibayar/selesai
-        if (status == 'delivered' || status == 'completed' || status == 'paid' || 
-            status == 'menunggu' || status == 'processing' || status == 'diproses' || 
-            status == 'delivering' || status == 'diantar' || status == 'diterima') {
+        final paymentStatus = data['paymentStatus'] as String?;
+        
+        // Hanya hitung pesanan yang sudah dibayar (paymentStatus = 'paid')
+        if (paymentStatus == 'paid') {
           final total = (data['total'] ?? 0) as num;
           totalRevenue += total.round();
         }

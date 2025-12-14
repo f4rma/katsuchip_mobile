@@ -171,7 +171,7 @@ class _MidtransPaymentPageState extends State<MidtransPaymentPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF7ED),
+      backgroundColor: const Color(0xFFFFF4DE),
       appBar: AppBar(
         title: const Text('Pembayaran'),
         backgroundColor: const Color(0xFFFF7A00),

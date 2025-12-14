@@ -151,6 +151,27 @@ class CartRepository {
       'shippingFee': shippingFee ?? 0,
       'deliveryDistance': deliveryDistance ?? 0.0,
     });
+    
+    // Kurangi stok menu setelah order dibuat
+    for (final item in items) {
+      try {
+        final menuRef = _db.collection('menus').doc(item.item.id);
+        await _db.runTransaction((transaction) async {
+          final menuDoc = await transaction.get(menuRef);
+          if (menuDoc.exists) {
+            final currentStock = ((menuDoc.data()?['stock'] ?? 0) as num).toInt();
+            final newStock = currentStock - item.qty;
+            transaction.update(menuRef, {
+              'stock': newStock >= 0 ? newStock : 0,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          }
+        });
+      } catch (e) {
+        print('Error reducing stock for ${item.item.id}: $e');
+        // Continue even if stock update fails
+      }
+    }
 
     // kosongkan cart
     await clear(uid);

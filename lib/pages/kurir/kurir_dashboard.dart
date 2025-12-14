@@ -128,7 +128,7 @@ class _KurirDashboardState extends State<KurirDashboard> {
   @override
   Widget build(BuildContext context) {
     const orange = Color(0xFFFF7A00);
-    const bg = Color(0xFFFFF7ED);
+    const bg = Color(0xFFFFF4DE);
     final uid = AuthService().currentUser?.uid ?? '';
 
     return Scaffold(

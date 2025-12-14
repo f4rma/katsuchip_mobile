@@ -409,7 +409,7 @@ class _KurirDetailOrderState extends State<KurirDetailOrder> {
   @override
   Widget build(BuildContext context) {
     const orange = Color(0xFFFF7A00);
-    const bg = Color(0xFFFFF7ED);
+    const bg = Color(0xFFFFF4DE);
 
     return Scaffold(
       backgroundColor: bg,

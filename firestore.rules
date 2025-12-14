@@ -94,21 +94,6 @@ service cloud.firestore {
       
       // User yang buat order bisa baca order sendiri
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
-          // Helpers
-          function isSignedIn() {
-            return request.auth != null;
-          }
-          function isAdmin() {
-            // Support either custom claims (request.auth.token.admin) or user doc role === 'admin'
-            return (isSignedIn() && (
-              (request.auth.token.admin == true) ||
-              (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
-            ));
-          }
-          function isOwner(userId) {
-            return isSignedIn() && request.auth.uid == userId;
-          }
-    
       
       // User bisa create order sendiri (userId harus match dengan auth.uid)
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
@@ -118,6 +103,9 @@ service cloud.firestore {
       allow update: if request.auth != null && 
                        (resource.data.userId == request.auth.uid || 
                         !('userId' in resource.data));
+                        
+      // Allow server-side updates (Cloud Functions/Webhook)
+      allow write: if request.auth == null;
     }
     
     // Orders subcollection (untuk collectionGroup query di laporan)
@@ -142,6 +130,10 @@ service cloud.firestore {
       
       // Hanya admin yang bisa create, update, delete menu
       allow write: if isAdmin();
+      
+      // Allow server-side updates untuk stok (dari cart_repository saat checkout)
+      // Ini penting untuk pengurangan stok otomatis
+      allow update: if request.auth != null;
     }
     
     // Cart collection

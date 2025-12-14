@@ -88,7 +88,7 @@ class _SplashscreenState extends State<Splashscreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context){
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF7ED), // Warna krem sesuai logo
+      backgroundColor: const Color(0xFFFFF4DE), // Warna krem sesuai logo
       body: Center(
         child: FadeTransition(
           opacity: _fade,

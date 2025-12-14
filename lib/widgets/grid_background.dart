@@ -30,7 +30,7 @@ class _GridPainterLayer extends StatelessWidget {
 class _GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final bg = Paint()..color = const Color(0xFFFFF7ED);
+    final bg = Paint()..color = const Color(0xFFFFF4DE);
     canvas.drawRect(Offset.zero & size, bg);
 
     // draw light grid

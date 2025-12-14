@@ -374,7 +374,7 @@ String _statusLabel(String s) {
     case 'paid':
       return 'Pembayaran Berhasil';
     case 'menunggu':
-      return 'Menunggu Konfirmasi';
+      return 'Menunggu';
     case 'processing':
     case 'diproses':
       return 'Sedang Diproses';

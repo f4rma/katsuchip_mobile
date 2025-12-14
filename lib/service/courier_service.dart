@@ -96,46 +96,40 @@ class CourierService {
       print('   Start of day (local): $startOfDayLocal');
       print('   Start of day (UTC): $startOfDayUtc');
 
-      // Count pesanan sedang dikirim
+      // Count pesanan sedang dikirim (status delivery = on_delivery)
       final onDeliverySnapshot = await _db
           .collectionGroup('orders')
           .where('courierId', isEqualTo: courierId)
           .where('deliveryStatus', isEqualTo: 'on_delivery')
           .get();
 
-      // Count pesanan terkirim hari ini (gunakan completedAt untuk konsistensi)
-      int deliveredTodayCount;
+      // Count pesanan terkirim hari ini (gunakan completedAt atau deliveredAt)
+      int deliveredTodayCount = 0;
       try {
-        final deliveredTodaySnapshot = await _db
-            .collectionGroup('orders')
-            .where('courierId', isEqualTo: courierId)
-            .where('deliveryStatus', isEqualTo: 'delivered')
-            .where('completedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDayUtc))
-            .get();
-        deliveredTodayCount = deliveredTodaySnapshot.docs.length;
-        print('   Delivered today (server query): $deliveredTodayCount');
-      } catch (e) {
-        // Fallback jika index belum tersedia: ambil delivered, filter di client berdasarkan timestamp
-        print('   ?? Fallback deliveredToday query (missing index?): $e');
-        final deliveredAll = await _db
+        // Query dengan completedAt
+        final deliveredSnapshot = await _db
             .collectionGroup('orders')
             .where('courierId', isEqualTo: courierId)
             .where('deliveryStatus', isEqualTo: 'delivered')
             .get();
-        deliveredTodayCount = deliveredAll.docs.where((d) {
-          final data = d.data() as Map<String, dynamic>?;
-          final ts = (data?['completedAt'] ?? data?['deliveredAt']);
-          if (ts is Timestamp) {
-            final dt = ts.toDate();
-            final isToday = dt.isAfter(startOfDayLocal) || dt.isAtSameMomentAs(startOfDayLocal);
-            if (isToday) {
-              print('   ?? Found delivered today: ${data?['code']} at $dt');
-            }
-            return isToday;
+        
+        // Filter di client berdasarkan timestamp completedAt atau deliveredAt
+        deliveredTodayCount = deliveredSnapshot.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>?;
+          if (data == null) return false;
+          
+          // Cek completedAt atau deliveredAt
+          final timestamp = data['completedAt'] ?? data['deliveredAt'];
+          if (timestamp is Timestamp) {
+            final dt = timestamp.toDate();
+            return dt.isAfter(startOfDayLocal) || dt.isAtSameMomentAs(startOfDayLocal);
           }
           return false;
         }).length;
-        print('   Delivered today (client filter): $deliveredTodayCount');
+        
+        print('   Delivered today count: $deliveredTodayCount');
+      } catch (e) {
+        print('   Error counting delivered today: $e');
       }
 
       // Total pengiriman

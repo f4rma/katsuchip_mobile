@@ -5,6 +5,8 @@
   final String imageAsset;
   final String description;
   final List<String> benefits;
+  final int stock;
+  final bool isActive;
 
   const MenuItemData({
     required this.id,
@@ -13,6 +15,8 @@
     required this.imageAsset,
     required this.description,
     required this.benefits,
+    this.stock = 0,
+    this.isActive = true,
   });
 
   Map<String, dynamic> toMap() => {
@@ -22,6 +26,8 @@
         'imageAsset': imageAsset,
         'description': description,
         'benefits': benefits,
+        'stock': stock,
+        'isActive': isActive,
       };
 
   factory MenuItemData.fromMap(Map<String, dynamic> m) => MenuItemData(
@@ -31,6 +37,8 @@
         imageAsset: m['imageAsset'] as String,
         description: m['description'] as String,
         benefits: (m['benefits'] as List).cast<String>(),
+        stock: ((m['stock'] ?? 0) as num).toInt(),
+        isActive: (m['isActive'] as bool?) ?? true,
       );
 }
 

@@ -101,7 +101,7 @@ class _CartPageState extends State<CartPage> {
                       final result = await Navigator.of(context).push<bool>(MaterialPageRoute(
                         builder: (_) => CheckoutPage(
                           items: widget.items,
-                          onCheckout: widget.onCheckout, // forward
+                          onCheckout: widget.onCheckout, 
                         ),
                       ));
                       
@@ -151,34 +151,75 @@ class _CartRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.orange.shade100),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: _imageThumb(item.item.imageAsset),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(item.item.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                Text(_formatRupiah(item.item.price)),
-              ],
-            ),
-          ),
           Row(
             children: [
-              _SmallIconBtn(icon: Icons.remove, onTap: onDec),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Text('${item.qty}'),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: _imageThumb(item.item.imageAsset),
               ),
-              _SmallIconBtn(icon: Icons.add, onTap: onInc),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.item.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    Text(_formatRupiah(item.item.price), style: const TextStyle(color: Color(0xFFFF7A00), fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              Row(
+                children: [
+                  _SmallIconBtn(icon: Icons.remove, onTap: onDec),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Text('${item.qty}'),
+                  ),
+                  _SmallIconBtn(icon: Icons.add, onTap: onInc),
+                ],
+              ),
+              IconButton(onPressed: onRemove, icon: const Icon(Icons.delete, color: Colors.redAccent))
             ],
           ),
-          IconButton(onPressed: onRemove, icon: const Icon(Icons.delete, color: Colors.redAccent))
+          if (item.item.description.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Deskripsi',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              item.item.description,
+              style: const TextStyle(fontSize: 11, color: Colors.black87),
+            ),
+          ],
+          if (item.item.benefits.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Yang Anda Dapat',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+            const SizedBox(height: 4),
+            ...item.item.benefits.map((benefit) => Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.circle, size: 6, color: Color(0xFFFF7A00)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      benefit,
+                      style: const TextStyle(fontSize: 11, color: Colors.black87),
+                    ),
+                  ),
+                ],
+              ),
+            )),
+          ],
         ],
       ),
     );
@@ -225,8 +266,7 @@ class _SummaryCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const _RowSpaced('Subtotal', ''),
-          const _RowSpaced('Ongkos Kirim', 'GRATIS'),
+          _RowSpaced('Subtotal Belanja', _formatRupiah(total)),
           const Divider(),
           _RowSpaced('Total', _formatRupiah(total), emphasize: true),
         ],

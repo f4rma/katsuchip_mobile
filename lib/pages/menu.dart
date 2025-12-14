@@ -27,59 +27,60 @@ class _MenuPageState extends State<MenuPage> {
         name: 'Mie Katsu Chilli Oil',
         price: 15000,
         imageAsset: 'assets/images/miechili.jpg',
-        description: 'Mie katsu dengan chilli oil gurih pedas.',
-        benefits: [],
+        description: 'Mie dengan katsu ayam renyah, kuah gurih dan sayuran segar',
+        benefits: ['Mie berkualitas', 'Katsu renyah', 'Kuah segar', 'Sayuran fresh'],
       ),
       MenuItemData(
         id: 'bentochili',
         name: 'Bento Katsu Chilli Oil',
         price: 20000,
         imageAsset: 'assets/images/bentochili.jpg',
-        description: 'Paket bento katsu dengan chilli oil.',
-        benefits: [],
+        description: 'Paket bento dengan katsu ayam renyah, nasi pulen, dan chilli oil pedas gurih',
+        benefits: ['Nasi pulen berkualitas', 'Katsu ayam renyah', 'Chilli oil pedas', 'Sayuran segar'],
       ),
       MenuItemData(
         id: 'bentosaus',
         name: 'Bento Katsu Spesial Saus',
         price: 20000,
         imageAsset: 'assets/images/bentosaus.jpg',
-        description: 'Paket bento katsu dengan saus spesial.',
-        benefits: [],
+        description: 'Paket bento lengkap dengan katsu ayam renyah, nasi, dan saus spesial rahasia',
+        benefits: ['Nasi pulen', 'Katsu ayam premium', 'Saus spesial rahasia', 'Porsi kenyang'],
       ),
       MenuItemData(
         id: 'nasichili',
         name: 'Nasi Katsu Chilli Oil',
         price: 15000,
         imageAsset: 'assets/images/nasichili.jpg',
-        description: 'Nasi katsu disiram chilli oil.',
-        benefits: [],
+        description: 'Nasi putih hangat dengan katsu ayam renyah dan chilli oil pedas gurih',
+        benefits: ['Nasi pulen hangat', 'Katsu renyah', 'Chilli oil pedas', 'Bumbu meresap'],
       ),
       MenuItemData(
         id: 'miespesial',
         name: 'Mi Goreng Spesial Katsu',
         price: 18000,
         imageAsset: 'assets/images/miespesial.jpg',
-        description: 'Mi goreng dengan topping katsu spesial.',
-        benefits: [],
+        description: 'Mi goreng spesial dengan topping katsu ayam renyah dan bumbu khas yang menggugah selera',
+        benefits: ['Mi goreng khas', 'Topping katsu premium', 'Bumbu spesial', 'Sayuran lengkap'],
       ),
       MenuItemData(
         id: 'nasisaus',
         name: 'Nasi Katsu Spesial Saus',
         price: 15000,
         imageAsset: 'assets/images/nasisaus.jpg',
-        description: 'Nasi katsu dengan saus spesial.',
-        benefits: [],
+        description: 'Nasi putih dengan katsu ayam renyah disiram saus spesial yang kaya rasa',
+        benefits: ['Nasi pulen', 'Katsu renyah gurih', 'Saus spesial', 'Porsi pas'],
       ),
     ];
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF7ED),
+      backgroundColor: const Color(0xFFFFF4DE),
       body: SafeArea(
         child: StreamBuilder<List<Map<String, dynamic>>>(
           stream: _menuStream,
           builder: (context, snap) {
             final menus = snap.data ?? const [];
+            // Filter menu: hanya tampilkan yang isActive = true dan stock > 0
             final items = menus.isNotEmpty
-                ? menus.map(_fromMenuDoc).toList()
+                ? menus.map(_fromMenuDoc).where((item) => item.isActive && item.stock > 0).toList()
                 : staticItems; // jika Firestore kosong, gunakan assets
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -284,6 +285,9 @@ MenuItemData _fromMenuDoc(Map<String, dynamic> m) {
   final image = (m['imageUrl'] as String?) ?? (m['imageAsset'] as String?) ?? '';
   final desc = (m['description'] as String?) ?? '';
   final benefits = (m['benefits'] as List?)?.cast<String>() ?? const <String>[];
+  final stock = ((m['stock'] ?? 0) as num).toInt();
+  final isActive = (m['isActive'] as bool?) ?? true;
+  
   return MenuItemData(
     id: id,
     name: name,
@@ -291,6 +295,8 @@ MenuItemData _fromMenuDoc(Map<String, dynamic> m) {
     imageAsset: image,
     description: desc,
     benefits: benefits,
+    stock: stock,
+    isActive: isActive,
   );
 }
 

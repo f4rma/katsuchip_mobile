@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import '../service/auth_service.dart';
 import '../utils/error_handler.dart';
+import '../utils/phone_formatter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginPage extends StatefulWidget {
@@ -48,10 +49,11 @@ class _LoginPageState extends State<LoginPage> {
               // email / phone
               TextField(
                 controller: _email,
+                keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: Colors.white,
-                  hintText: 'Email atau Nomor Telepon',
+                  hintText: 'Email',
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                   border: OutlineInputBorder(

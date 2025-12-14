@@ -53,6 +53,12 @@ lib/firebase_options.dart
 *.keystore
 *.jks
 android/key.properties
+android/local.properties
+.firebase/
+
+# Firebase functions config (contains credentials)
+functions/.runtimeconfig.json
+functions/serviceAccountKey.json
 
 # API keys and sensitive configuration files
 lib/config/api_keys.dart

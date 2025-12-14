@@ -553,7 +553,7 @@ class _KurirBatchPickupPageState extends State<KurirBatchPickupPage> {
         : 'Batch Pickup - Route Optimization';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF7ED),
+      backgroundColor: const Color(0xFFFFF4DE),
       appBar: AppBar(
         backgroundColor: orange,
         foregroundColor: Colors.white,

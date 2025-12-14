@@ -97,7 +97,7 @@ class _AppRootState extends State<AppRoot> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      theme: ThemeData(scaffoldBackgroundColor: const Color(0xFFFFF7ED)),
+      theme: ThemeData(scaffoldBackgroundColor: const Color(0xFFFFF4DE)),
       debugShowCheckedModeBanner: false,
       initialRoute: '/',
       onGenerateRoute: (settings) {

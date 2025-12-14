@@ -1,5 +1,6 @@
 ﻿import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,6 +8,8 @@ import 'package:gal/gal.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class OrderDetailPage extends StatefulWidget {
   final String uid;
@@ -155,18 +158,40 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         );
       }
 
-      // Download image
-      final response = await http.get(Uri.parse(qrCodeUrl));
-      if (response.statusCode != 200) {
-        throw Exception('Failed to download QR code');
+      // Generate QR Code untuk webhook URL
+      final webhookUrl = 'https://us-central1-katsuchip-65298.cloudfunctions.net/paymentSuccess?order_id=${widget.orderId}&amount=${widget.orderData['totalAmount']}';
+      
+      // Create QR image using qr_flutter
+      final qrValidationResult = QrValidator.validate(
+        data: webhookUrl,
+        version: QrVersions.auto,
+        errorCorrectionLevel: QrErrorCorrectLevel.L,
+      );
+      
+      if (qrValidationResult.status != QrValidationStatus.valid) {
+        throw Exception('Invalid QR data');
+      }
+      
+      final qrCode = qrValidationResult.qrCode!;
+      final painter = QrPainter.withQr(
+        qr: qrCode,
+        color: const Color(0xFF000000),
+        emptyColor: const Color(0xFFFFFFFF),
+        gapless: true,
+      );
+      
+      // Convert to image
+      final picData = await painter.toImageData(500, format: ui.ImageByteFormat.png);
+      if (picData == null) {
+        throw Exception('Failed to generate QR image');
       }
 
       // Save to temporary file first
       final tempDir = await getTemporaryDirectory();
-      final fileName = 'qris_${widget.orderId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final fileName = 'KatsuChip_QR_${widget.orderId}.png';
       final filePath = '${tempDir.path}/$fileName';
       final file = File(filePath);
-      await file.writeAsBytes(response.bodyBytes);
+      await file.writeAsBytes(picData.buffer.asUint8List());
 
       // Save to gallery using gal package
       await Gal.putImage(filePath, album: 'KatsuChip');
@@ -177,15 +202,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 12),
-                Text('QR Code berhasil disimpan ke galeri'),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
+            content: Text('QR Code berhasil disimpan ke galeri'),
+            backgroundColor: Color(0xFFFF7A00),
+            duration: Duration(seconds: 2),
           ),
         );
       }
@@ -500,28 +519,12 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                   ),
                 ],
               ),
-              child: Image.network(
-                qrCodeUrl,
-                width: 200,
-                height: 200,
-                fit: BoxFit.contain,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return SizedBox(
-                    width: 200,
-                    height: 200,
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        value: loadingProgress.expectedTotalBytes != null
-                            ? loadingProgress.cumulativeBytesLoaded /
-                                loadingProgress.expectedTotalBytes!
-                            : null,
-                        color: const Color(0xFFFF7A00),
-                      ),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
+              child: QrImageView(
+                data: 'https://us-central1-katsuchip-65298.cloudfunctions.net/paymentSuccess?order_id=${widget.orderId}&amount=${widget.orderData['totalAmount']}',
+                version: QrVersions.auto,
+                size: 200.0,
+                backgroundColor: Colors.white,
+                errorStateBuilder: (cxt, err) {
                   return Container(
                     width: 200,
                     height: 200,
@@ -531,7 +534,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       children: [
                         Icon(Icons.error_outline, size: 40, color: Colors.red),
                         SizedBox(height: 8),
-                        Text('Gagal memuat QR Code', style: TextStyle(fontSize: 12)),
+                        Text('Gagal membuat QR Code', style: TextStyle(fontSize: 12)),
                       ],
                     ),
                   );
@@ -786,7 +789,7 @@ String _statusLabel(String s) {
     case 'paid':
       return 'Pembayaran Berhasil';
     case 'menunggu':
-      return 'Menunggu Konfirmasi';
+      return 'Menunggu';
     case 'processing':
     case 'diproses':
       return 'Sedang Diproses';

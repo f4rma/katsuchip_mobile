@@ -11,7 +11,7 @@ class DetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     const orange = Color(0xFFFF7A00);
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF7ED),
+      backgroundColor: const Color(0xFFFFF4DE),
       body: SafeArea(
         child: Column(
           children: [
